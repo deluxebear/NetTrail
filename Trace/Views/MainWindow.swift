@@ -118,7 +118,3 @@ private struct MainWindowContent: View {
             .background(.orange.opacity(0.15))
     }
 }
-
-// Placeholders; replaced by Views/OnboardingView.swift and Views/SettingsView.swift in Task 12.
-struct OnboardingView: View { var body: some View { Text("Onboarding") } }
-struct SettingsView: View { var body: some View { Text("Settings") } }
