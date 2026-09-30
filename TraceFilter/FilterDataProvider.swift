@@ -1,0 +1,153 @@
+import Foundation
+import NetworkExtension
+import os
+import TraceCore
+
+/// Monitor-only content filter: every path returns allow.
+final class FilterDataProvider: NEFilterDataProvider {
+    private static let peekTimeout: TimeInterval = 2
+    private static let dnsPeekBytes = 1500
+
+    private let ring = EventRing(capacity: 10_000)
+    private let dnsCache = DNSCache()
+    private let identities = IdentityCache()
+    private let peeks = PeekTable()
+    private var server: EventServer?
+    private var sweepTimer: DispatchSourceTimer?
+    private let log = Logger(subsystem: "com.xiongyanlin.trace.filter", category: "filter")
+
+    override func startFilter(completionHandler: @escaping (Error?) -> Void) {
+        server = EventServer(ring: ring)
+        if server == nil { log.error("missing NEMachServiceName/TraceTeamID; XPC disabled") }
+        server?.start()
+        startSweeper()
+        apply(NEFilterSettings(rules: [], defaultAction: .filterData)) { error in
+            if let error { self.log.error("apply settings failed: \(error.localizedDescription, privacy: .public)") }
+            completionHandler(error)
+        }
+    }
+
+    override func stopFilter(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
+        sweepTimer?.cancel()
+        sweepTimer = nil
+        server?.stop()
+        server = nil
+        completionHandler()
+    }
+
+    // MARK: Flows
+
+    override func handleNewFlow(_ flow: NEFilterFlow) -> NEFilterNewFlowVerdict {
+        guard let socketFlow = flow as? NEFilterSocketFlow, let remote = RemoteEndpoint.of(socketFlow) else {
+            return .allow()
+        }
+        if remote.proto == .udp && remote.port == 53 {
+            // DNS responses feed the IP → name cache; DNS flows themselves are not recorded.
+            return .filterDataVerdict(withFilterInbound: true, peekInboundBytes: Self.dnsPeekBytes,
+                                      filterOutbound: false, peekOutboundBytes: 0)
+        }
+        let app = identities.identity(for: flow.sourceAppAuditToken ?? socketFlow.sourceProcessAuditToken)
+        let now = Date()
+        if let host = HostNormalizer.normalizeDomain(socketFlow.remoteHostname) {
+            emit(flow.identifier, app: app, remote: remote, host: host, source: .system, time: now)
+            return Self.allowAndReport()
+        }
+        guard remote.proto == .tcp else {
+            emitFallback(flow.identifier, PendingOpen(app: app, remote: remote, startedAt: now), now: now)
+            return Self.allowAndReport()
+        }
+        peeks.begin(flow.identifier, PendingOpen(app: app, remote: remote, startedAt: now))
+        let verdict = NEFilterNewFlowVerdict.filterDataVerdict(
+            withFilterInbound: false, peekInboundBytes: 0,
+            filterOutbound: true, peekOutboundBytes: PayloadSniffer.maxPeekBytes)
+        verdict.shouldReport = true
+        return verdict
+    }
+
+    override func handleOutboundData(from flow: NEFilterFlow, readBytesStartOffset offset: Int, readBytes: Data) -> NEFilterDataVerdict {
+        guard let pending = peeks.append(flow.identifier, readBytes) else { return Self.dataAllowAndReport() }
+        let now = Date()
+        switch PayloadSniffer.sniff(pending.buffer) {
+        case let .found(host, source):
+            if let taken = peeks.take(flow.identifier) {
+                emit(flow.identifier, app: taken.app, remote: taken.remote, host: host, source: source, time: taken.startedAt)
+            }
+            return Self.dataAllowAndReport()
+        case .needMore where pending.buffer.count < PayloadSniffer.maxPeekBytes
+            && now.timeIntervalSince(pending.startedAt) < Self.peekTimeout:
+            return NEFilterDataVerdict(passBytes: readBytes.count, peekBytes: PayloadSniffer.maxPeekBytes)
+        default:
+            if let taken = peeks.take(flow.identifier) { emitFallback(flow.identifier, taken, now: now) }
+            return Self.dataAllowAndReport()
+        }
+    }
+
+    override func handleOutboundDataComplete(for flow: NEFilterFlow) -> NEFilterDataVerdict {
+        if let taken = peeks.take(flow.identifier) { emitFallback(flow.identifier, taken, now: Date()) }
+        return Self.dataAllowAndReport()
+    }
+
+    override func handleInboundData(from flow: NEFilterFlow, readBytesStartOffset offset: Int, readBytes: Data) -> NEFilterDataVerdict {
+        if let answer = DNSResponseParser.parse(readBytes) {
+            let now = Date()
+            for address in answer.addresses {
+                dnsCache.insert(ip: address.ip, host: answer.queryName, ttl: address.ttl, now: now)
+            }
+        }
+        return NEFilterDataVerdict(passBytes: readBytes.count, peekBytes: Self.dnsPeekBytes)
+    }
+
+    override func handleInboundDataComplete(for flow: NEFilterFlow) -> NEFilterDataVerdict {
+        .allow()
+    }
+
+    override func handle(_ report: NEFilterReport) {
+        guard report.event == .flowClosed, let flow = report.flow else { return }
+        let now = Date()
+        if let taken = peeks.take(flow.identifier) { emitFallback(flow.identifier, taken, now: now) }
+        ring.append(.closed(FlowClosed(flowID: flow.identifier, time: now,
+                                       bytesIn: UInt64(max(0, report.bytesInboundCount)),
+                                       bytesOut: UInt64(max(0, report.bytesOutboundCount)))))
+    }
+
+    // MARK: Helpers
+
+    private static func allowAndReport() -> NEFilterNewFlowVerdict {
+        let verdict = NEFilterNewFlowVerdict.allow()
+        verdict.shouldReport = true
+        return verdict
+    }
+
+    private static func dataAllowAndReport() -> NEFilterDataVerdict {
+        let verdict = NEFilterDataVerdict.allow()
+        verdict.shouldReport = true
+        return verdict
+    }
+
+    private func emit(_ id: UUID, app: AppIdentity, remote: Endpoint, host: String?, source: HostSource, time: Date) {
+        ring.append(.opened(FlowOpened(flowID: id, time: time, app: app, remote: remote, host: host, hostSource: source)))
+    }
+
+    private func emitFallback(_ id: UUID, _ pending: PendingOpen, now: Date) {
+        if let host = dnsCache.lookup(ip: pending.remote.ip, now: now) {
+            emit(id, app: pending.app, remote: pending.remote, host: host, source: .dnsCache, time: pending.startedAt)
+        } else {
+            emit(id, app: pending.app, remote: pending.remote, host: nil, source: .none, time: pending.startedAt)
+        }
+    }
+
+    /// Emits fallback “opened” events for flows that never sent enough bytes within the timeout.
+    private func startSweeper() {
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "com.xiongyanlin.trace.filter.sweep"))
+        timer.schedule(deadline: .now() + 1, repeating: 1)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            let now = Date()
+            for (id, pending) in self.peeks.takeExpired(startedBefore: now.addingTimeInterval(-Self.peekTimeout)) {
+                self.emitFallback(id, pending, now: now)
+            }
+        }
+        timer.resume()
+        sweepTimer = timer
+    }
+}
