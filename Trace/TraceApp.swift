@@ -42,8 +42,3 @@ private struct MenuBarLabel: View {
             }
     }
 }
-
-// Placeholder; replaced by Views/MainWindow.swift in Task 11.
-struct MainWindow: View {
-    var body: some View { Text("Trace") }
-}

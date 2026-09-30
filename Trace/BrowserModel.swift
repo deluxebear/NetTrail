@@ -1,0 +1,88 @@
+import Foundation
+import TraceKit
+
+@MainActor
+final class BrowserModel: ObservableObject {
+    enum SidebarItem: Hashable {
+        case allApps
+        case app(Int64)
+        case settings
+    }
+
+    enum AppSort: String, CaseIterable, Identifiable {
+        case recent, traffic
+        var id: String { rawValue }
+        var title: String { self == .recent ? "最近" : "流量" }
+    }
+
+    @Published var selection: SidebarItem? = .allApps {
+        didSet { if oldValue != selection { selectedDomain = nil; reload() } }
+    }
+    @Published var range: TimeRange = .today { didSet { reload() } }
+    @Published var appSort: AppSort = .recent { didSet { reload() } }
+    @Published var search = ""
+    @Published var selectedDomain: String? { didSet { reloadDetail() } }
+    @Published private(set) var apps: [AppSummary] = []
+    @Published private(set) var domains: [DomainSummary] = []
+    @Published private(set) var detailHours: [HourPoint] = []
+    @Published private(set) var detailApps: [AppSummary] = []
+    @Published private(set) var errorText: String?
+
+    private let store: Store
+
+    init(store: Store) {
+        self.store = store
+    }
+
+    var filteredApps: [AppSummary] {
+        guard !search.isEmpty else { return apps }
+        return apps.filter {
+            $0.displayName.localizedCaseInsensitiveContains(search) || $0.key.localizedCaseInsensitiveContains(search)
+        }
+    }
+
+    var selectedAppID: Int64? {
+        if case .app(let id) = selection { return id }
+        return nil
+    }
+
+    func reload() {
+        do {
+            var loaded = try store.apps(range: range)
+            if appSort == .traffic {
+                loaded.sort { $0.bytesIn &+ $0.bytesOut > $1.bytesIn &+ $1.bytesOut }
+            }
+            apps = loaded
+            switch selection {
+            case .app(let id): domains = try store.domains(appID: id, range: range)
+            case .allApps: domains = try store.domains(appID: nil, range: range)
+            case .settings, nil: domains = []
+            }
+            errorText = nil
+        } catch {
+            errorText = "读取数据失败：\(error.localizedDescription)"
+        }
+        reloadDetail()
+    }
+
+    func focus(appKey: String) {
+        if let app = (try? store.apps(range: .all))?.first(where: { $0.key == appKey }) {
+            selection = .app(app.id)
+        }
+    }
+
+    private func reloadDetail() {
+        guard let domain = selectedDomain else {
+            detailHours = []
+            detailApps = []
+            return
+        }
+        do {
+            detailHours = try store.hourly(appID: selectedAppID, domain: domain,
+                                           since: Date().addingTimeInterval(-7 * 86_400))
+            detailApps = selectedAppID == nil ? try store.apps(range: range, domain: domain) : []
+        } catch {
+            errorText = "读取数据失败：\(error.localizedDescription)"
+        }
+    }
+}
