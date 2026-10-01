@@ -1,0 +1,17 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  swift-tests:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Test TraceCore
+        run: swift test --package-path Packages/TraceCore
