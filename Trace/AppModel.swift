@@ -11,7 +11,7 @@ final class AppModel: ObservableObject {
 
     let extensionManager: ExtensionManager
     let store: Store
-    private let aggregator: Aggregator
+    private let ingestor: Ingestor
     private let connection: FilterConnection
 
     @Published private(set) var recent: [RecentApp] = []
@@ -21,13 +21,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var storeBackupURL: URL?
     @Published private(set) var writeError: String?
     @Published var focusAppKey: String?
-    @Published var isPaused = false {
-        didSet { aggregator.isPaused = isPaused }
-    }
+    @Published var isPaused = false
     @Published var retentionDays: Int {
         didSet {
             UserDefaults.standard.set(retentionDays, forKey: Self.retentionKey)
-            purgeOldHistory()
+            Task { await purgeOldHistory() }
         }
     }
 
@@ -38,8 +36,7 @@ final class AppModel: ObservableObject {
         self.storeBackupURL = storeBackupURL
         self.connection = connection
         self.extensionManager = extensionManager
-        let resolver = AppIdentityResolver()
-        aggregator = Aggregator(store: store) { resolver.resolve($0) }
+        ingestor = Ingestor(store: store)
         let saved = UserDefaults.standard.integer(forKey: Self.retentionKey)
         retentionDays = saved > 0 ? saved : 30
     }
@@ -84,14 +81,14 @@ final class AppModel: ObservableObject {
         guard !started else { return }
         started = true
         await extensionManager.refresh()
-        purgeOldHistory()
+        await purgeOldHistory()
         Task { await pollLoop() }
         Task { await purgeLoop() }
     }
 
-    func clearAllData() {
+    func clearAllData() async {
         do {
-            try store.deleteAll()
+            try await ingestor.deleteAll()
             dataVersion &+= 1
         } catch {
             writeError = "清空数据失败：\(error.localizedDescription)"
@@ -105,23 +102,19 @@ final class AppModel: ObservableObject {
             do {
                 batch = try await connection.fetch(maxCount: Self.batchSize)
             } catch {
-                isConnected = false
-                recent = aggregator.recent.snapshot(now: Date())
+                update(\.isConnected, false)
+                update(\.recent, await ingestor.recent(now: Date()))
                 try? await Task.sleep(for: .seconds(backoff))
                 backoff = min(backoff * 2, 30)
                 continue
             }
-            isConnected = true
+            update(\.isConnected, true)
             backoff = 1
-            do {
-                try aggregator.ingest(batch, now: Date())
-                writeError = nil
-            } catch {
-                writeError = "写入数据库失败：\(error.localizedDescription)"
-            }
-            droppedTotal = aggregator.droppedTotal
+            let result = await ingestor.ingest(batch, paused: isPaused, now: Date())
+            update(\.writeError, result.error.map { "写入数据库失败：\($0.localizedDescription)" })
+            update(\.droppedTotal, result.droppedTotal)
+            update(\.recent, result.recent)
             if !batch.events.isEmpty { dataVersion &+= 1 }
-            recent = aggregator.recent.snapshot(now: Date())
             if batch.events.count < Self.batchSize {
                 try? await Task.sleep(for: .seconds(1))
             }
@@ -131,11 +124,16 @@ final class AppModel: ObservableObject {
     private func purgeLoop() async {
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(86_400))
-            purgeOldHistory()
+            await purgeOldHistory()
         }
     }
 
-    private func purgeOldHistory() {
-        try? store.purge(before: Date().addingTimeInterval(-Double(retentionDays) * 86_400))
+    private func purgeOldHistory() async {
+        try? await ingestor.purge(before: Date().addingTimeInterval(-Double(retentionDays) * 86_400))
+    }
+
+    /// @Published notifies on every assignment, so skip unchanged values to avoid needless view updates.
+    private func update<T: Equatable>(_ keyPath: ReferenceWritableKeyPath<AppModel, T>, _ value: T) {
+        if self[keyPath: keyPath] != value { self[keyPath: keyPath] = value }
     }
 }

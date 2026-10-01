@@ -27,7 +27,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .confirmationDialog("清空所有记录？此操作无法撤销。", isPresented: $confirmClear) {
-            Button("清空", role: .destructive) { model.clearAllData() }
+            Button("清空", role: .destructive) { Task { await model.clearAllData() } }
         }
         .confirmationDialog("卸载扩展后将停止记录。", isPresented: $confirmUninstall) {
             Button("卸载", role: .destructive) { Task { await extensionManager.uninstall() } }

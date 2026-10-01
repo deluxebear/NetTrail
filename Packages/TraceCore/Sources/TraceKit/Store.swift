@@ -3,13 +3,14 @@ import GRDB
 import TraceCore
 
 public final class Store: Sendable {
-    private let queue: DatabaseQueue
+    private let queue: any DatabaseWriter
 
+    /// WAL-mode pool, so reads are not blocked by an in-progress write.
     public convenience init(path: String) throws {
-        try self.init(queue: DatabaseQueue(path: path))
+        try self.init(queue: DatabasePool(path: path))
     }
 
-    private init(queue: DatabaseQueue) throws {
+    private init(queue: any DatabaseWriter) throws {
         self.queue = queue
         try Self.migrator.migrate(queue)
     }
