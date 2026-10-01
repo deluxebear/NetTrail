@@ -29,7 +29,7 @@ struct MergedOps {
         var count: Int64
     }
 
-    struct DomainClose {
+    struct DomainTraffic {
         var lastSeen: Date
         var bytesIn: Int64
         var bytesOut: Int64
@@ -58,9 +58,9 @@ struct MergedOps {
 
     private(set) var apps: [String: AppRow] = [:]
     private(set) var opens: [DomainKey: DomainOpen] = [:]
-    private(set) var closes: [DomainKey: DomainClose] = [:]
-    /// Latest close time per app key, for `app.last_seen`.
-    private(set) var appCloses: [String: Date] = [:]
+    private(set) var traffic: [DomainKey: DomainTraffic] = [:]
+    /// Latest traffic time per app key, for `app.last_seen`.
+    private(set) var appTraffic: [String: Date] = [:]
     private(set) var hours: [HourKey: HourCounts] = [:]
     private(set) var origins: [OriginKey: OriginRow] = [:]
 
@@ -102,19 +102,19 @@ struct MergedOps {
                                                        firstSeen: time, lastSeen: time, count: 1)
                     }
                 }
-            case let .close(appKey, domain, time, bytesIn, bytesOut):
+            case let .traffic(appKey, domain, time, bytesIn, bytesOut):
                 let inBytes = Int64(clamping: bytesIn)
                 let outBytes = Int64(clamping: bytesOut)
                 let key = DomainKey(appKey: appKey, domain: domain)
-                if var close = closes[key] {
-                    close.lastSeen = max(close.lastSeen, time)
-                    close.bytesIn = Self.add(close.bytesIn, inBytes)
-                    close.bytesOut = Self.add(close.bytesOut, outBytes)
-                    closes[key] = close
+                if var entry = traffic[key] {
+                    entry.lastSeen = max(entry.lastSeen, time)
+                    entry.bytesIn = Self.add(entry.bytesIn, inBytes)
+                    entry.bytesOut = Self.add(entry.bytesOut, outBytes)
+                    traffic[key] = entry
                 } else {
-                    closes[key] = DomainClose(lastSeen: time, bytesIn: inBytes, bytesOut: outBytes)
+                    traffic[key] = DomainTraffic(lastSeen: time, bytesIn: inBytes, bytesOut: outBytes)
                 }
-                appCloses[appKey] = max(appCloses[appKey] ?? time, time)
+                appTraffic[appKey] = max(appTraffic[appKey] ?? time, time)
                 let hourKey = HourKey(appKey: appKey, domain: domain, hour: Store.hour(time))
                 var counts = hours[hourKey] ?? HourCounts()
                 counts.bytesIn = Self.add(counts.bytesIn, inBytes)

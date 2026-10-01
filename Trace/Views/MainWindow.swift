@@ -47,10 +47,11 @@ private struct MainWindowContent: View {
         .sheet(isPresented: $showOnboarding) { OnboardingView() }
         .onAppear {
             browser.reload()
-            showOnboarding = !extensionManager.isReady
+            showOnboarding = extensionManager.needsSetup
             if let key = model.focusAppKey { browser.focus(appKey: key); model.focusAppKey = nil }
         }
-        .onReceive(model.$dataVersion.throttle(for: .seconds(2), scheduler: RunLoop.main, latest: true)) { _ in
+        // Traffic updates arrive every second; reloading re-lays out the whole table, so cap it.
+        .onReceive(model.$dataVersion.throttle(for: .seconds(5), scheduler: RunLoop.main, latest: true)) { _ in
             browser.reload()
         }
         .onChange(of: model.focusAppKey) { _, key in
@@ -58,8 +59,8 @@ private struct MainWindowContent: View {
             browser.focus(appKey: key)
             model.focusAppKey = nil
         }
-        .onChange(of: extensionManager.isReady) { _, ready in
-            if !ready { showOnboarding = true }
+        .onChange(of: extensionManager.needsSetup) { _, needsSetup in
+            if needsSetup { showOnboarding = true }
         }
     }
 

@@ -65,13 +65,13 @@ final class BrowserModel: ObservableObject {
             if appSort == .traffic {
                 loaded.sort { $0.bytesIn &+ $0.bytesOut > $1.bytesIn &+ $1.bytesOut }
             }
-            apps = loaded
+            update(\.apps, loaded)
             switch selection {
-            case .app(let id): domains = try store.domains(appID: id, range: range)
-            case .allApps: domains = try store.domains(appID: nil, range: range)
-            case .settings, nil: domains = []
+            case .app(let id): update(\.domains, try store.domains(appID: id, range: range))
+            case .allApps: update(\.domains, try store.domains(appID: nil, range: range))
+            case .settings, nil: update(\.domains, [])
             }
-            errorText = nil
+            update(\.errorText, nil)
         } catch {
             errorText = "读取数据失败：\(error.localizedDescription)"
         }
@@ -87,20 +87,25 @@ final class BrowserModel: ObservableObject {
     private func reloadDetail() {
         do {
             if selectedDomain != nil || selectedAppID != nil {
-                detailOrigins = try store.origins(appID: selectedAppID, domain: selectedDomain, range: range)
+                update(\.detailOrigins, try store.origins(appID: selectedAppID, domain: selectedDomain, range: range))
             } else {
-                detailOrigins = []
+                update(\.detailOrigins, [])
             }
             guard let domain = selectedDomain else {
-                detailHours = []
-                detailApps = []
+                update(\.detailHours, [])
+                update(\.detailApps, [])
                 return
             }
-            detailHours = try store.hourly(appID: selectedAppID, domain: domain,
-                                           since: Date().addingTimeInterval(-7 * 86_400))
-            detailApps = selectedAppID == nil ? try store.apps(range: range, domain: domain) : []
+            update(\.detailHours, try store.hourly(appID: selectedAppID, domain: domain,
+                                                   since: Date().addingTimeInterval(-7 * 86_400)))
+            update(\.detailApps, selectedAppID == nil ? try store.apps(range: range, domain: domain) : [])
         } catch {
             errorText = "读取数据失败：\(error.localizedDescription)"
         }
+    }
+
+    /// Reloads run every few seconds while traffic flows; skip unchanged values so tables are not re-laid out.
+    private func update<T: Equatable>(_ keyPath: ReferenceWritableKeyPath<BrowserModel, T>, _ value: T) {
+        if self[keyPath: keyPath] != value { self[keyPath: keyPath] = value }
     }
 }

@@ -4,6 +4,7 @@ import TraceKit
 struct MenuBarView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var extensionManager: ExtensionManager
+    @EnvironmentObject private var recent: RecentFeed
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
     @State private var expandedKey: String?
@@ -18,10 +19,10 @@ struct MenuBarView: View {
                 Text("有 \(model.droppedTotal) 条事件丢失").font(.caption).foregroundStyle(.orange)
             }
             Text("最近 5 分钟").font(.caption).foregroundStyle(.secondary)
-            if model.recent.isEmpty {
+            if recent.apps.isEmpty {
                 Text("暂无网络活动").foregroundStyle(.secondary).padding(.vertical, 4)
             }
-            ForEach(model.recent) { app in
+            ForEach(recent.apps) { app in
                 row(app)
             }
             Divider()
@@ -39,6 +40,10 @@ struct MenuBarView: View {
     private var header: some View {
         HStack {
             Text("Trace").font(.headline)
+            if totalRateIn + totalRateOut >= 1 {
+                Text("↓ \(Formatting.rate(totalRateIn))  ↑ \(Formatting.rate(totalRateOut))")
+                    .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+            }
             Spacer()
             Circle().fill(model.status.color).frame(width: 8, height: 8)
             Text(model.status.title).font(.caption).foregroundStyle(.secondary)
@@ -54,6 +59,9 @@ struct MenuBarView: View {
                 AppIconView(path: app.path)
                 Text(app.displayName).lineLimit(1)
                 Spacer()
+                if app.rateIn + app.rateOut >= 1 {
+                    Text("↓ \(Formatting.rate(app.rateIn))").monospacedDigit().foregroundStyle(.secondary)
+                }
                 Text("\(app.domains.count) 个域名").foregroundStyle(.secondary)
                 Image(systemName: expandedKey == app.key ? "chevron.down" : "chevron.right")
                     .foregroundStyle(.secondary)
@@ -75,6 +83,9 @@ struct MenuBarView: View {
             .padding(.leading, 24)
         }
     }
+
+    private var totalRateIn: Double { recent.apps.reduce(0) { $0 + $1.rateIn } }
+    private var totalRateOut: Double { recent.apps.reduce(0) { $0 + $1.rateOut } }
 
     private func openMain() {
         // The .window-style MenuBarExtra panel does not close on its own when another window opens.

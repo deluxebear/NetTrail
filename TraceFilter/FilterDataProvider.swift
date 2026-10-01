@@ -12,6 +12,7 @@ final class FilterDataProvider: NEFilterDataProvider {
     private let dnsCache = DNSCache()
     private let identities = IdentityCache()
     private let peeks = PeekTable()
+    private let counters = FlowCounters()
     private var server: EventServer?
     private var sweepTimer: DispatchSourceTimer?
     private let log = Logger(subsystem: "com.xiongyanlin.trace.filter", category: "filter")
@@ -62,6 +63,7 @@ final class FilterDataProvider: NEFilterDataProvider {
             withFilterInbound: false, peekInboundBytes: 0,
             filterOutbound: true, peekOutboundBytes: PayloadSniffer.maxPeekBytes)
         verdict.shouldReport = true
+        verdict.statisticsReportFrequency = Self.statisticsFrequency
         return verdict
     }
 
@@ -76,7 +78,9 @@ final class FilterDataProvider: NEFilterDataProvider {
             return Self.dataAllowAndReport()
         case .needMore where pending.buffer.count < PayloadSniffer.maxPeekBytes
             && now.timeIntervalSince(pending.startedAt) < Self.peekTimeout:
-            return NEFilterDataVerdict(passBytes: readBytes.count, peekBytes: PayloadSniffer.maxPeekBytes)
+            let verdict = NEFilterDataVerdict(passBytes: readBytes.count, peekBytes: PayloadSniffer.maxPeekBytes)
+            verdict.statisticsReportFrequency = Self.statisticsFrequency
+            return verdict
         default:
             if let taken = peeks.take(flow.identifier) { emitFallback(flow.identifier, taken, now: now) }
             return Self.dataAllowAndReport()
@@ -102,26 +106,42 @@ final class FilterDataProvider: NEFilterDataProvider {
         .allow()
     }
 
+    /// Statistics reports carry the flow's running byte totals; they are turned into increments here.
     override func handle(_ report: NEFilterReport) {
-        guard report.event == .flowClosed, let flow = report.flow else { return }
+        guard let flow = report.flow, report.event == .statistics || report.event == .flowClosed else { return }
         let now = Date()
+        // A flow can report traffic before its hostname peek finishes; its “opened” event must come first.
         if let taken = peeks.take(flow.identifier) { emitFallback(flow.identifier, taken, now: now) }
-        ring.append(.closed(FlowClosed(flowID: flow.identifier, time: now,
-                                       bytesIn: UInt64(max(0, report.bytesInboundCount)),
-                                       bytesOut: UInt64(max(0, report.bytesOutboundCount)))))
+        let totalIn = UInt64(max(0, report.bytesInboundCount))
+        let totalOut = UInt64(max(0, report.bytesOutboundCount))
+        if report.event == .statistics {
+            let delta = counters.advance(flow.identifier, totalIn: totalIn, totalOut: totalOut)
+            guard !delta.isZero else { return }
+            ring.append(.progress(FlowProgress(flowID: flow.identifier, time: now,
+                                               bytesIn: delta.bytesIn, bytesOut: delta.bytesOut)))
+        } else {
+            let rest = counters.finish(flow.identifier, totalIn: totalIn, totalOut: totalOut)
+            ring.append(.closed(FlowClosed(flowID: flow.identifier, time: now,
+                                           bytesIn: rest.bytesIn, bytesOut: rest.bytesOut)))
+        }
     }
 
     // MARK: Helpers
 
+    /// About once a second, so long-lived flows show traffic while they run.
+    private static let statisticsFrequency: NEFilterReport.Frequency = .medium
+
     private static func allowAndReport() -> NEFilterNewFlowVerdict {
         let verdict = NEFilterNewFlowVerdict.allow()
         verdict.shouldReport = true
+        verdict.statisticsReportFrequency = statisticsFrequency
         return verdict
     }
 
     private static func dataAllowAndReport() -> NEFilterDataVerdict {
         let verdict = NEFilterDataVerdict.allow()
         verdict.shouldReport = true
+        verdict.statisticsReportFrequency = statisticsFrequency
         return verdict
     }
 

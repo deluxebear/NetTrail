@@ -36,7 +36,8 @@ public struct OriginInfo: Hashable, Sendable {
 
 public enum StoreOp: Equatable, Sendable {
     case open(app: ResolvedApp, domain: String, resolved: Bool, source: HostSource, time: Date, origin: OriginInfo? = nil)
-    case close(appKey: String, domain: String, time: Date, bytesIn: UInt64, bytesOut: UInt64)
+    /// Bytes an open or just-closed flow moved, counted in the hour of `time`.
+    case traffic(appKey: String, domain: String, time: Date, bytesIn: UInt64, bytesOut: UInt64)
 }
 
 public enum TimeRange: String, CaseIterable, Identifiable, Sendable {

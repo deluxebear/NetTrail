@@ -16,7 +16,7 @@ func app(_ key: String, name: String? = nil, path: String = "/Applications/X.app
         let store = try Store.inMemory()
         try store.apply([
             .open(app: app("com.a"), domain: "api.x.com", resolved: true, source: .sni, time: t0),
-            .close(appKey: "com.a", domain: "api.x.com", time: t0.addingTimeInterval(10), bytesIn: 100, bytesOut: 50),
+            .traffic(appKey: "com.a", domain: "api.x.com", time: t0.addingTimeInterval(10), bytesIn: 100, bytesOut: 50),
         ])
         let apps = try store.apps(range: .all, now: t0)
         #expect(apps.count == 1)
@@ -31,7 +31,7 @@ func app(_ key: String, name: String? = nil, path: String = "/Applications/X.app
         let store = try Store.inMemory()
         try store.apply([
             .open(app: app("com.a"), domain: "d.com", resolved: true, source: .sni, time: t0.addingTimeInterval(3500)),
-            .close(appKey: "com.a", domain: "d.com", time: t0.addingTimeInterval(3700), bytesIn: 7, bytesOut: 3),
+            .traffic(appKey: "com.a", domain: "d.com", time: t0.addingTimeInterval(3700), bytesIn: 7, bytesOut: 3),
         ])
         let points = try store.hourly(appID: nil, domain: "d.com", since: t0)
         #expect(points.count == 2)
@@ -77,7 +77,7 @@ func app(_ key: String, name: String? = nil, path: String = "/Applications/X.app
         let store = try Store.inMemory()
         try store.apply([
             .open(app: app("com.a"), domain: "d.com", resolved: true, source: .sni, time: t0),
-            .close(appKey: "com.a", domain: "d.com", time: t0, bytesIn: .max, bytesOut: .max),
+            .traffic(appKey: "com.a", domain: "d.com", time: t0, bytesIn: .max, bytesOut: .max),
         ])
         #expect(try store.apps(range: .all, now: t0).first?.bytesIn == Int64.max)
     }
@@ -89,8 +89,8 @@ func app(_ key: String, name: String? = nil, path: String = "/Applications/X.app
             .open(app: app("com.a"), domain: "d.com", resolved: true, source: .sni, time: t0.addingTimeInterval(10)),
             .open(app: app("com.a", name: "Middle"), domain: "d.com", resolved: true, source: .httpHost, time: t0.addingTimeInterval(30)),
             .open(app: app("com.a"), domain: "d.com", resolved: true, source: .sni, time: t0.addingTimeInterval(3600)),
-            .close(appKey: "com.a", domain: "d.com", time: t0.addingTimeInterval(40), bytesIn: 5, bytesOut: 1),
-            .close(appKey: "com.a", domain: "d.com", time: t0.addingTimeInterval(50), bytesIn: 7, bytesOut: 2),
+            .traffic(appKey: "com.a", domain: "d.com", time: t0.addingTimeInterval(40), bytesIn: 5, bytesOut: 1),
+            .traffic(appKey: "com.a", domain: "d.com", time: t0.addingTimeInterval(50), bytesIn: 7, bytesOut: 2),
         ])
         let apps = try store.apps(range: .all, now: t0)
         #expect(apps.count == 1)
@@ -107,10 +107,10 @@ func app(_ key: String, name: String? = nil, path: String = "/Applications/X.app
         let store = try Store.inMemory()
         try store.apply([
             .open(app: app("com.a"), domain: "d.com", resolved: true, source: .sni, time: t0),
-            .close(appKey: "com.a", domain: "d.com", time: t0, bytesIn: .max, bytesOut: 1),
-            .close(appKey: "com.a", domain: "d.com", time: t0, bytesIn: .max, bytesOut: 1),
+            .traffic(appKey: "com.a", domain: "d.com", time: t0, bytesIn: .max, bytesOut: 1),
+            .traffic(appKey: "com.a", domain: "d.com", time: t0, bytesIn: .max, bytesOut: 1),
         ])
-        try store.apply([.close(appKey: "com.a", domain: "d.com", time: t0, bytesIn: 1, bytesOut: 1)])
+        try store.apply([.traffic(appKey: "com.a", domain: "d.com", time: t0, bytesIn: 1, bytesOut: 1)])
         let summary = try #require(try store.apps(range: .all, now: t0).first)
         #expect(summary.bytesIn == Int64.max && summary.bytesOut == 3)
         let domain = try #require(try store.domains(appID: nil, range: .all, now: t0).first)
@@ -119,7 +119,7 @@ func app(_ key: String, name: String? = nil, path: String = "/Applications/X.app
 
     @Test func closeForUnknownAppIsIgnored() throws {
         let store = try Store.inMemory()
-        try store.apply([.close(appKey: "nobody", domain: "d.com", time: t0, bytesIn: 1, bytesOut: 1)])
+        try store.apply([.traffic(appKey: "nobody", domain: "d.com", time: t0, bytesIn: 1, bytesOut: 1)])
         #expect(try store.apps(range: .all, now: t0).isEmpty)
     }
 

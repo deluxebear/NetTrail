@@ -6,6 +6,19 @@ struct DomainTableView: View {
     @State private var sortOrder = [KeyPathComparator(\DomainSummary.lastSeen, order: .reverse)]
 
     var body: some View {
+        // `Text(_, style: .relative)` re-lays out every row each second; a 30-second tick is plenty here.
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            table(now: context.date)
+        }
+        .overlay {
+            if browser.domains.isEmpty {
+                ContentUnavailableView("暂无记录", systemImage: "network",
+                                       description: Text("所选时间范围内没有网络连接。"))
+            }
+        }
+    }
+
+    private func table(now: Date) -> some View {
         Table(browser.domains.sorted(using: sortOrder), selection: $browser.selectedDomain, sortOrder: $sortOrder) {
             TableColumn("域名", value: \.domain) { row in
                 HStack(spacing: 4) {
@@ -23,14 +36,8 @@ struct DomainTableView: View {
                 .width(80)
             TableColumn("↑ 流量", value: \.bytesOut) { Text(Formatting.bytes($0.bytesOut)).monospacedDigit() }
                 .width(80)
-            TableColumn("最近", value: \.lastSeen) { Text($0.lastSeen, style: .relative) }
+            TableColumn("最近", value: \.lastSeen) { Text(Formatting.relative($0.lastSeen, now: now)) }
                 .width(90)
-        }
-        .overlay {
-            if browser.domains.isEmpty {
-                ContentUnavailableView("暂无记录", systemImage: "network",
-                                       description: Text("所选时间范围内没有网络连接。"))
-            }
         }
     }
 }

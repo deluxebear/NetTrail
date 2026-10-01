@@ -12,6 +12,7 @@ import Testing
                                                  ancestors: ["zsh", "ghostty"], script: nil),
                            remote: Endpoint(ip: "93.184.216.34", port: 443, proto: .tcp),
                            host: "example.com", hostSource: .sni)),
+        .progress(FlowProgress(flowID: id, time: Date(timeIntervalSince1970: 1_700_000_002), bytesIn: 5, bytesOut: 1)),
         .closed(FlowClosed(flowID: id, time: Date(timeIntervalSince1970: 1_700_000_005), bytesIn: 10, bytesOut: 20)),
     ], droppedSinceLastBatch: 3)
     let decoded = try EventBatch.decode(batch.encoded())

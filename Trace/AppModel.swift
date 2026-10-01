@@ -2,6 +2,13 @@ import Foundation
 import TraceCore
 import TraceKit
 
+/// Live menu bar activity. Separate from `AppModel` because its rates change every second,
+/// and views observing `AppModel` (the main window) must not re-render that often.
+@MainActor
+final class RecentFeed: ObservableObject {
+    @Published fileprivate(set) var apps: [RecentApp] = []
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     enum MonitorStatus { case needsSetup, disconnected, paused, monitoring }
@@ -14,7 +21,7 @@ final class AppModel: ObservableObject {
     private let ingestor: Ingestor
     private let connection: FilterConnection
 
-    @Published private(set) var recent: [RecentApp] = []
+    let recent = RecentFeed()
     @Published private(set) var isConnected = false
     @Published private(set) var droppedTotal: UInt64 = 0
     @Published private(set) var dataVersion = 0
@@ -103,7 +110,7 @@ final class AppModel: ObservableObject {
                 batch = try await connection.fetch(maxCount: Self.batchSize)
             } catch {
                 update(\.isConnected, false)
-                update(\.recent, await ingestor.recent(now: Date()))
+                update(\.recent.apps, await ingestor.recent(now: Date()))
                 try? await Task.sleep(for: .seconds(backoff))
                 backoff = min(backoff * 2, 30)
                 continue
@@ -113,7 +120,7 @@ final class AppModel: ObservableObject {
             let result = await ingestor.ingest(batch, paused: isPaused, now: Date())
             update(\.writeError, result.error.map { "写入数据库失败：\($0.localizedDescription)" })
             update(\.droppedTotal, result.droppedTotal)
-            update(\.recent, result.recent)
+            update(\.recent.apps, result.recent)
             if !batch.events.isEmpty { dataVersion &+= 1 }
             if batch.events.count < Self.batchSize {
                 try? await Task.sleep(for: .seconds(1))

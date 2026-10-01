@@ -78,6 +78,22 @@ public struct FlowOpened: Codable, Equatable, Sendable {
     }
 }
 
+/// Bytes a still-open flow transferred since its previous report.
+public struct FlowProgress: Codable, Equatable, Sendable {
+    public let flowID: UUID
+    public let time: Date
+    public let bytesIn: UInt64
+    public let bytesOut: UInt64
+
+    public init(flowID: UUID, time: Date, bytesIn: UInt64, bytesOut: UInt64) {
+        self.flowID = flowID
+        self.time = time
+        self.bytesIn = bytesIn
+        self.bytesOut = bytesOut
+    }
+}
+
+/// A flow ended; the byte counts are what was not already sent in `FlowProgress` events.
 public struct FlowClosed: Codable, Equatable, Sendable {
     public let flowID: UUID
     public let time: Date
@@ -94,6 +110,7 @@ public struct FlowClosed: Codable, Equatable, Sendable {
 
 public enum FlowEvent: Codable, Equatable, Sendable {
     case opened(FlowOpened)
+    case progress(FlowProgress)
     case closed(FlowClosed)
 }
 

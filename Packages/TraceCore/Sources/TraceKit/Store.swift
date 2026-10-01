@@ -114,7 +114,7 @@ public final class Store: Sendable {
                 ])
             }
             let findApp = try db.cachedStatement(sql: "SELECT id FROM app WHERE identity_key = ?")
-            for key in merged.appCloses.keys where ids[key] == nil {
+            for key in merged.appTraffic.keys where ids[key] == nil {
                 ids[key] = try Int64.fetchOne(findApp, arguments: [key])
             }
 
@@ -134,23 +134,23 @@ public final class Store: Sendable {
                 ])
             }
 
-            let closeDomain = try db.cachedStatement(sql: """
+            let addTraffic = try db.cachedStatement(sql: """
                 UPDATE app_domain SET
                   bytes_in = \(Self.saturatingSum("bytes_in", ":in")),
                   bytes_out = \(Self.saturatingSum("bytes_out", ":out")),
                   last_seen = MAX(last_seen, :t)
                 WHERE app_id = :id AND domain = :domain
                 """)
-            for (key, close) in merged.closes {
+            for (key, entry) in merged.traffic {
                 guard let id = ids[key.appKey] else { continue }
-                try closeDomain.execute(arguments: [
-                    "in": close.bytesIn, "out": close.bytesOut, "t": close.lastSeen.timeIntervalSince1970,
+                try addTraffic.execute(arguments: [
+                    "in": entry.bytesIn, "out": entry.bytesOut, "t": entry.lastSeen.timeIntervalSince1970,
                     "id": id, "domain": key.domain,
                 ])
             }
 
             let touchApp = try db.cachedStatement(sql: "UPDATE app SET last_seen = MAX(last_seen, ?) WHERE id = ?")
-            for (key, time) in merged.appCloses {
+            for (key, time) in merged.appTraffic {
                 guard let id = ids[key] else { continue }
                 try touchApp.execute(arguments: [time.timeIntervalSince1970, id])
             }

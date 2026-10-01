@@ -22,6 +22,7 @@ struct TraceApp: App {
         MenuBarExtra {
             MenuBarView()
                 .environmentObject(model)
+                .environmentObject(model.recent)
                 .environmentObject(model.extensionManager)
         } label: {
             MenuBarLabel()

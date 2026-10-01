@@ -29,4 +29,23 @@ import Testing
         for i in 0..<12 { recent.record(app: app("com.\(i)"), domain: "d.com", time: t0.addingTimeInterval(Double(i))) }
         #expect(recent.snapshot(now: t0.addingTimeInterval(20), limit: 8).count == 8)
     }
+
+    @Test func ratesCoverOnlyTheRateWindow() {
+        let recent = RecentActivity(window: 300, rateWindow: 10)
+        let a = app("com.a")
+        recent.record(app: a, domain: "d.com", time: t0)
+        recent.recordTraffic(app: a, domain: "d.com", time: t0.addingTimeInterval(1), bytesIn: 9_000, bytesOut: 900)
+        recent.recordTraffic(app: a, domain: "d.com", time: t0.addingTimeInterval(15), bytesIn: 1_000, bytesOut: 100)
+        let snapshot = recent.snapshot(now: t0.addingTimeInterval(20))
+        #expect(snapshot.first?.rateIn == 100 && snapshot.first?.rateOut == 10)
+        #expect(recent.snapshot(now: t0.addingTimeInterval(60)).first?.rateIn == 0)
+    }
+
+    @Test func trafficKeepsAppRecent() {
+        let recent = RecentActivity(window: 300)
+        let a = app("com.a")
+        recent.record(app: a, domain: "stream.com", time: t0)
+        recent.recordTraffic(app: a, domain: "stream.com", time: t0.addingTimeInterval(600), bytesIn: 1, bytesOut: 0)
+        #expect(recent.snapshot(now: t0.addingTimeInterval(610)).map(\.key) == ["com.a"])
+    }
 }

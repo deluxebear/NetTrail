@@ -11,6 +11,10 @@ private func opened(_ id: UUID, host: String?, at time: Date) -> FlowEvent {
                        host: host, hostSource: host == nil ? .none : .sni))
 }
 
+private func progress(_ id: UUID, at time: Date, bytesIn: UInt64, bytesOut: UInt64 = 0) -> FlowEvent {
+    .progress(FlowProgress(flowID: id, time: time, bytesIn: bytesIn, bytesOut: bytesOut))
+}
+
 private func closed(_ id: UUID, at time: Date, bytesIn: UInt64 = 100, bytesOut: UInt64 = 10) -> FlowEvent {
     .closed(FlowClosed(flowID: id, time: time, bytesIn: bytesIn, bytesOut: bytesOut))
 }
@@ -84,5 +88,44 @@ private func makeAggregator(_ store: Store, pendingTTL: TimeInterval = 86_400) -
         let aggregator = makeAggregator(try Store.inMemory())
         try aggregator.ingest(EventBatch(events: [opened(UUID(), host: "example.com", at: t0)], droppedSinceLastBatch: 0), now: t0)
         #expect(aggregator.recent.snapshot(now: t0).first?.domains == ["example.com"])
+    }
+
+    @Test func progressCountsBytesInTheirHourAndKeepsFlowOpen() throws {
+        let store = try Store.inMemory()
+        let aggregator = makeAggregator(store)
+        let id = UUID()
+        try aggregator.ingest(EventBatch(events: [
+            opened(id, host: "stream.com", at: t0),
+            progress(id, at: t0.addingTimeInterval(10), bytesIn: 500, bytesOut: 5),
+        ], droppedSinceLastBatch: 0), now: t0.addingTimeInterval(10))
+        try aggregator.ingest(EventBatch(events: [
+            progress(id, at: t0.addingTimeInterval(3_700), bytesIn: 300),
+            closed(id, at: t0.addingTimeInterval(7_300), bytesIn: 200, bytesOut: 1),
+        ], droppedSinceLastBatch: 0), now: t0.addingTimeInterval(7_300))
+        #expect(aggregator.pendingCount == 0)
+        let summary = try #require(try store.apps(range: .all, now: t0).first)
+        #expect(summary.connCount == 1 && summary.bytesIn == 1_000 && summary.bytesOut == 6)
+        let points = try store.hourly(appID: nil, domain: "stream.com", since: t0)
+        #expect(points.map(\.bytesIn) == [500, 300, 200])
+        #expect(aggregator.recent.snapshot(now: t0.addingTimeInterval(3_710)).first?.domains == ["stream.com"])
+    }
+
+    @Test func activeFlowsOutliveThePendingTTL() throws {
+        let store = try Store.inMemory()
+        let aggregator = makeAggregator(store, pendingTTL: 60)
+        let id = UUID()
+        try aggregator.ingest(EventBatch(events: [opened(id, host: "ws.com", at: t0)], droppedSinceLastBatch: 0), now: t0)
+        try aggregator.ingest(EventBatch(events: [progress(id, at: t0.addingTimeInterval(50), bytesIn: 1)],
+                                         droppedSinceLastBatch: 0), now: t0.addingTimeInterval(50))
+        try aggregator.ingest(EventBatch(events: [closed(id, at: t0.addingTimeInterval(100), bytesIn: 2)],
+                                         droppedSinceLastBatch: 0), now: t0.addingTimeInterval(100))
+        #expect(try store.apps(range: .all, now: t0).first?.bytesIn == 3)
+    }
+
+    @Test func progressForUnknownFlowIsIgnored() throws {
+        let store = try Store.inMemory()
+        let aggregator = makeAggregator(store)
+        try aggregator.ingest(EventBatch(events: [progress(UUID(), at: t0, bytesIn: 5)], droppedSinceLastBatch: 0), now: t0)
+        #expect(try store.apps(range: .all, now: t0).isEmpty)
     }
 }

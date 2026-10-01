@@ -6,6 +6,21 @@ enum Formatting {
         ByteCountFormatter.string(fromByteCount: value, countStyle: .file)
     }
 
+    static func rate(_ bytesPerSecond: Double) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytesPerSecond.rounded()), countStyle: .file) + "/s"
+    }
+
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter
+    }()
+
+    /// “3 分钟前” relative to `now`; dates newer than `now` read as now.
+    static func relative(_ date: Date, now: Date) -> String {
+        relativeFormatter.localizedString(for: date, relativeTo: max(now, date))
+    }
+
     /// Containing folder with the home directory shown as `~`, e.g. `~/.hermes/node/bin`.
     static func location(_ path: String) -> String {
         let folder = (path as NSString).deletingLastPathComponent

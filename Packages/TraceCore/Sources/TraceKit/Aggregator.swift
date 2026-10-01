@@ -4,9 +4,10 @@ import TraceCore
 /// Turns extension events into store writes. Not thread-safe; use from one actor.
 public final class Aggregator {
     private struct PendingFlow {
-        let appKey: String
+        let app: ResolvedApp
         let domain: String
-        let openedAt: Date
+        /// Open or latest traffic time; flows idle longer than the TTL are forgotten.
+        var lastActive: Date
     }
 
     private let store: Store
@@ -30,7 +31,7 @@ public final class Aggregator {
     public func ingest(_ batch: EventBatch, now: Date) throws {
         droppedTotal += batch.droppedSinceLastBatch
         let cutoff = now.addingTimeInterval(-pendingTTL)
-        pending = pending.filter { $0.value.openedAt >= cutoff }
+        pending = pending.filter { $0.value.lastActive >= cutoff }
         guard !isPaused else { return }
 
         var ops: [StoreOp] = []
@@ -41,12 +42,20 @@ public final class Aggregator {
                 let domain = flow.host ?? flow.remote.ip
                 ops.append(.open(app: app, domain: domain, resolved: flow.host != nil, source: flow.hostSource, time: flow.time,
                                  origin: originInfo(flow.origin, app: app)))
-                pending[flow.flowID] = PendingFlow(appKey: app.key, domain: domain, openedAt: flow.time)
+                pending[flow.flowID] = PendingFlow(app: app, domain: domain, lastActive: flow.time)
                 recent.record(app: app, domain: domain, time: flow.time)
+            case .progress(let flow):
+                guard var open = pending[flow.flowID] else { continue }
+                open.lastActive = max(open.lastActive, flow.time)
+                pending[flow.flowID] = open
+                ops.append(.traffic(appKey: open.app.key, domain: open.domain, time: flow.time,
+                                    bytesIn: flow.bytesIn, bytesOut: flow.bytesOut))
+                recent.recordTraffic(app: open.app, domain: open.domain, time: flow.time,
+                                     bytesIn: flow.bytesIn, bytesOut: flow.bytesOut)
             case .closed(let flow):
                 guard let open = pending.removeValue(forKey: flow.flowID) else { continue }
-                ops.append(.close(appKey: open.appKey, domain: open.domain, time: flow.time,
-                                  bytesIn: flow.bytesIn, bytesOut: flow.bytesOut))
+                ops.append(.traffic(appKey: open.app.key, domain: open.domain, time: flow.time,
+                                    bytesIn: flow.bytesIn, bytesOut: flow.bytesOut))
             }
         }
         try store.apply(ops)
