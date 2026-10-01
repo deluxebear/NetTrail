@@ -10,15 +10,22 @@ private let emptyResponseHex = "123485800001000000000000076578616d706c6503636f6d
 
 private func label(_ s: String) -> [UInt8] { [UInt8(s.utf8.count)] + Array(s.utf8) }
 
+/// Concatenates byte chunks; avoids long `+` chains the type checker chokes on.
+private func join(_ parts: [UInt8]...) -> [UInt8] { parts.flatMap { $0 } }
+
+private let header: [UInt8] = [0x12, 0x34, 0x81, 0x80]
+
 /// www.example.com A with compression: CNAME -> edge.example.com, A, AAAA.
 private func compressedResponse() -> Data {
-    var m: [UInt8] = [0x12, 0x34, 0x81, 0x80] + be16(1) + be16(3) + be16(0) + be16(0)
-    m += label("www") + label("example") + label("com") + [0] + be16(1) + be16(1)   // question at 12; "example" at 16
-    m += [0xc0, 0x0c] + be16(5) + be16(1) + [0, 0, 0x01, 0x2c] + be16(7) + label("edge") + [0xc0, 0x10]
-    m += [0xc0, 0x0c] + be16(1) + be16(1) + [0, 0, 0, 0x3c] + be16(4) + [93, 184, 216, 34]
-    m += [0xc0, 0x0c] + be16(28) + be16(1) + [0, 0, 0, 0x78] + be16(16)
-        + [0x26, 0x06, 0x28, 0x00] + Array(repeating: 0, count: 11) + [1]
-    return Data(m)
+    let counts: [UInt8] = join(be16(1), be16(3), be16(0), be16(0))
+    // question at 12; "example" at 16
+    let question: [UInt8] = join(label("www"), label("example"), label("com"), [0], be16(1), be16(1))
+    let cname: [UInt8] = join([0xc0, 0x0c], be16(5), be16(1), [0, 0, 0x01, 0x2c], be16(7),
+                              label("edge"), [0xc0, 0x10])
+    let a: [UInt8] = join([0xc0, 0x0c], be16(1), be16(1), [0, 0, 0, 0x3c], be16(4), [93, 184, 216, 34])
+    let v6: [UInt8] = [0x26, 0x06, 0x28, 0x00] + [UInt8](repeating: 0, count: 11) + [1]
+    let aaaa: [UInt8] = join([0xc0, 0x0c], be16(28), be16(1), [0, 0, 0, 0x78], be16(16), v6)
+    return Data(join(header, counts, question, cname, a, aaaa))
 }
 
 @Suite struct DNSResponseParserTests {
@@ -41,7 +48,7 @@ private func compressedResponse() -> Data {
         #expect(DNSResponseParser.parse(Data(m)) == nil)
     }
     @Test func pointerLoopTerminates() {
-        let m: [UInt8] = [0x12, 0x34, 0x81, 0x80] + be16(1) + be16(1) + be16(0) + be16(0) + [0xc0, 0x0c] + be16(1) + be16(1)
+        let m: [UInt8] = join(header, be16(1), be16(1), be16(0), be16(0), [0xc0, 0x0c], be16(1), be16(1))
         #expect(DNSResponseParser.parse(Data(m)) == nil)
     }
     @Test func truncatedResponseIsNil() {
@@ -51,7 +58,7 @@ private func compressedResponse() -> Data {
     @Test func survivesRandomAndMutatedInput() {
         let real = [UInt8](compressedResponse())
         for _ in 0..<2000 {
-            _ = DNSResponseParser.parse(Data([0x12, 0x34, 0x81, 0x80] + randomBytes(count: Int.random(in: 0...400))))
+            _ = DNSResponseParser.parse(Data(join(header, randomBytes(count: Int.random(in: 0...400)))))
             var mutated = real
             for _ in 0..<4 { mutated[Int.random(in: 0..<mutated.count)] = UInt8.random(in: 0...255) }
             _ = DNSResponseParser.parse(Data(mutated))
