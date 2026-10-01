@@ -59,6 +59,16 @@ final class BrowserModel: ObservableObject {
         return duplicates
     }
 
+    /// Proxy rules for the hosts `appID` contacted in the current time range, without LAN addresses.
+    func proxyRules(appID: Int64, format: ProxyRuleFormat) -> String {
+        do {
+            return ProxyRules.render(try store.domains(appID: appID, range: range).map(\.domain), as: format)
+        } catch {
+            errorText = error.localizedDescription
+            return ""
+        }
+    }
+
     func reload() {
         do {
             var loaded = try store.apps(range: range)

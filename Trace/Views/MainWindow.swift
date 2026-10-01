@@ -84,6 +84,13 @@ private struct MainWindowContent: View {
                         }
                     }
                     .help(app.path ?? app.key)
+                    .contextMenu {
+                        Menu("复制连接（不含局域网）") {
+                            ForEach(ProxyRuleFormat.allCases) { format in
+                                Button(format.title) { copyRules(appID: app.id, format: format) }
+                            }
+                        }
+                    }
                     .tag(BrowserModel.SidebarItem.app(app.id))
                 }
             }
@@ -98,6 +105,13 @@ private struct MainWindowContent: View {
             .padding(8)
         }
         .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+    }
+
+    private func copyRules(appID: Int64, format: ProxyRuleFormat) {
+        let rules = browser.proxyRules(appID: appID, format: format)
+        guard !rules.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(rules + "\n", forType: .string)
     }
 
     @ViewBuilder
