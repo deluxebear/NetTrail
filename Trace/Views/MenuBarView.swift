@@ -5,6 +5,7 @@ struct MenuBarView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var extensionManager: ExtensionManager
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
     @State private var expandedKey: String?
 
     var body: some View {
@@ -76,6 +77,8 @@ struct MenuBarView: View {
     }
 
     private func openMain() {
+        // The .window-style MenuBarExtra panel does not close on its own when another window opens.
+        dismiss()
         openWindow(id: "main")
         NSApp.activate(ignoringOtherApps: true)
     }
