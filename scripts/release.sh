@@ -33,7 +33,7 @@ cat > "$OUT/export.plist" <<PLIST
   <key>method</key><string>developer-id</string>
   <key>teamID</key><string>$TEAM_ID</string>
   <key>signingStyle</key><string>manual</string>
-  <key>signingCertificate</key><string>$SIGN_IDENTITY</string>
+  <key>signingCertificate</key><string>Developer ID Application</string>
   <key>provisioningProfiles</key><dict>
     <key>$BUNDLE_ID</key><string>$(profile_name "$APP_PROFILE")</string>
     <key>$BUNDLE_ID.filter</key><string>$(profile_name "$FILTER_PROFILE")</string>
