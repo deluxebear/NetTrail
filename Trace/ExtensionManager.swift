@@ -22,6 +22,13 @@ final class ExtensionManager: NSObject, ObservableObject {
 
     var isReady: Bool { extensionState == .activated && filterEnabled }
 
+    /// Build number of the extension inside this app bundle.
+    private var bundledExtensionVersion: String? {
+        let url = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Library/SystemExtensions/\(extensionID).systemextension")
+        return Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+    }
+
     override init() {
         super.init()
         configObserver = NotificationCenter.default.addObserver(
@@ -131,8 +138,12 @@ extension ExtensionManager: OSSystemExtensionRequestDelegate {
                              foundProperties properties: [OSSystemExtensionProperties]) {
         MainActor.assumeIsolated {
             requestKinds.removeValue(forKey: ObjectIdentifier(request))
-            if properties.contains(where: { $0.isEnabled && !$0.isUninstalling }) {
+            if let active = properties.first(where: { $0.isEnabled && !$0.isUninstalling }) {
                 extensionState = .activated
+                // The app was updated but the system still runs the old extension: ask to replace it.
+                if let bundled = bundledExtensionVersion, active.bundleVersion != bundled {
+                    install()
+                }
             } else if properties.contains(where: { $0.isAwaitingUserApproval }) {
                 extensionState = .needsApproval
             } else {

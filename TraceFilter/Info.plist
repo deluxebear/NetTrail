@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>SYSX</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSSystemExtensionUsageDescription</key>
 	<string>Trace 通过内容过滤器记录各 App 访问的网络域名，不会拦截任何连接。</string>
 	<key>NetworkExtension</key>

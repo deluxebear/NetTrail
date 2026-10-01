@@ -30,6 +30,8 @@ targets:
       path: Trace/Info.plist
       properties:
         CFBundleDisplayName: Trace
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSUIElement: true
         LSApplicationCategoryType: public.app-category.utilities
         TraceFilterMachService: $(TRACE_MACH_SERVICE)
@@ -58,6 +60,8 @@ targets:
       path: TraceFilter/Info.plist
       properties:
         CFBundleDisplayName: TraceFilter
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundlePackageType: SYSX
         TraceTeamID: $(TRACE_TEAM_ID)
         NSSystemExtensionUsageDescription: Trace 通过内容过滤器记录各 App 访问的网络域名，不会拦截任何连接。
