@@ -44,6 +44,13 @@ xcodebuild -exportArchive -archivePath "$OUT/NetTrail.xcarchive" \
   -exportOptionsPlist "$OUT/export.plist" -exportPath "$OUT/export"
 
 APP="$OUT/export/NetTrail.app"
+# The unsigned archive carries no hardened runtime flag; re-sign inside-out with it
+# (required for notarization), keeping the entitlements and embedded profiles.
+for bundle in "$APP"/Contents/Library/SystemExtensions/*.systemextension "$APP"; do
+  codesign --force --options runtime --timestamp --preserve-metadata=entitlements,identifier \
+    --sign "$SIGN_IDENTITY" "$bundle"
+done
+codesign --verify --deep --strict "$APP"
 DMG="build/NetTrail-$APP_VERSION-$ARCH.dmg"
 STAGE="$OUT/dmg"; mkdir -p "$STAGE"
 ditto "$APP" "$STAGE/NetTrail.app"; ln -s /Applications "$STAGE/Applications"
