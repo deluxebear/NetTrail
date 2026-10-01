@@ -47,10 +47,10 @@ public enum TimeRange: String, CaseIterable, Identifiable, Sendable {
 
     public var title: String {
         switch self {
-        case .today: "今天"
-        case .last7Days: "7 天"
-        case .last30Days: "30 天"
-        case .all: "全部"
+        case .today: String(localized: "Today")
+        case .last7Days: String(localized: "7 Days")
+        case .last30Days: String(localized: "30 Days")
+        case .all: String(localized: "All")
         }
     }
 

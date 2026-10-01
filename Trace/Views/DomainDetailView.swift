@@ -12,29 +12,29 @@ struct DomainDetailView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(domain.domain).font(.title3).bold().textSelection(.enabled)
                     Grid(alignment: .leading, verticalSpacing: 4) {
-                        GridRow { Text("首次访问").foregroundStyle(.secondary); Text(domain.firstSeen, format: .dateTime) }
-                        GridRow { Text("最近访问").foregroundStyle(.secondary); Text(domain.lastSeen, format: .dateTime) }
-                        GridRow { Text("域名来源").foregroundStyle(.secondary); Text(domain.lastSource.title) }
-                        GridRow { Text("连接数").foregroundStyle(.secondary); Text("\(domain.connCount)") }
+                        GridRow { Text("First Seen").foregroundStyle(.secondary); Text(domain.firstSeen, format: .dateTime) }
+                        GridRow { Text("Last Seen").foregroundStyle(.secondary); Text(domain.lastSeen, format: .dateTime) }
+                        GridRow { Text("Domain Source").foregroundStyle(.secondary); Text(domain.lastSource.title) }
+                        GridRow { Text("Connections").foregroundStyle(.secondary); Text("\(domain.connCount)") }
                         GridRow {
-                            Text("流量").foregroundStyle(.secondary)
+                            Text("Traffic").foregroundStyle(.secondary)
                             Text("↓ \(Formatting.bytes(domain.bytesIn))  ↑ \(Formatting.bytes(domain.bytesOut))")
                         }
                     }
-                    Text("近 7 天（按小时）").font(.headline)
+                    Text("Last 7 Days (Hourly)").font(.headline)
                     Chart(browser.detailHours) { point in
-                        BarMark(x: .value("时间", point.hour, unit: .hour),
-                                y: .value("连接数", point.connCount))
+                        BarMark(x: .value("Time", point.hour, unit: .hour),
+                                y: .value("Connections", point.connCount))
                     }
                     .frame(height: 160)
                     if !browser.detailApps.isEmpty {
-                        Text("访问过该域名的 App").font(.headline)
+                        Text("Apps That Contacted This Domain").font(.headline)
                         ForEach(browser.detailApps) { app in
                             HStack {
                                 AppIconView(path: app.path)
                                 Text(app.displayName)
                                 Spacer()
-                                Text("\(app.connCount) 次").foregroundStyle(.secondary)
+                                Text("\(app.connCount) connections").foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -51,21 +51,21 @@ struct DomainDetailView: View {
                     }
                     Grid(alignment: .leading, verticalSpacing: 4) {
                         GridRow {
-                            Text("路径").foregroundStyle(.secondary)
-                            Text(app.path ?? "未知").textSelection(.enabled)
+                            Text("Path").foregroundStyle(.secondary)
+                            Text(app.path ?? String(localized: "Unknown")).textSelection(.enabled)
                         }
                         GridRow {
-                            Text("标识").foregroundStyle(.secondary)
+                            Text("Identifier").foregroundStyle(.secondary)
                             Text(app.key).textSelection(.enabled)
                         }
-                        GridRow { Text("最近活动").foregroundStyle(.secondary); Text(app.lastSeen, format: .dateTime) }
+                        GridRow { Text("Last Active").foregroundStyle(.secondary); Text(app.lastSeen, format: .dateTime) }
                     }
                     OriginList(origins: browser.detailOrigins, showsApp: false)
                 }
                 .padding()
             }
         } else {
-            ContentUnavailableView("选择一个域名", systemImage: "cursorarrow.click")
+            ContentUnavailableView("Select a Domain", systemImage: "cursorarrow.click")
         }
     }
 }
@@ -77,7 +77,7 @@ private struct OriginList: View {
 
     var body: some View {
         if !origins.isEmpty {
-            Text("调用来源").font(.headline)
+            Text("Launched By").font(.headline)
             ForEach(origins) { origin in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
@@ -87,21 +87,21 @@ private struct OriginList: View {
                             Text("·").foregroundStyle(.secondary)
                         }
                         if origin.via.isEmpty {
-                            Text("直接运行").foregroundStyle(.secondary)
+                            Text("Run directly").foregroundStyle(.secondary)
                         } else {
                             AppIconView(path: origin.viaPath)
-                            Text("经由 \(origin.via)")
+                            Text("via \(origin.via)")
                         }
                         Spacer()
-                        Text("\(origin.connCount) 次").foregroundStyle(.secondary)
+                        Text("\(origin.connCount) connections").foregroundStyle(.secondary)
                     }
                     if !origin.script.isEmpty {
-                        Text("脚本：\(origin.script)")
+                        Text("Script: \(origin.script)")
                             .font(.caption.monospaced()).textSelection(.enabled)
                             .lineLimit(2).truncationMode(.middle)
                     }
                     if !origin.chain.isEmpty {
-                        Text("进程链：\(origin.chain)")
+                        Text("Process chain: \(origin.chain)")
                             .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                             .lineLimit(2).truncationMode(.middle)
                     }

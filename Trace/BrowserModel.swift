@@ -6,13 +6,12 @@ final class BrowserModel: ObservableObject {
     enum SidebarItem: Hashable {
         case allApps
         case app(Int64)
-        case settings
     }
 
     enum AppSort: String, CaseIterable, Identifiable {
         case recent, traffic
         var id: String { rawValue }
-        var title: String { self == .recent ? "最近" : "流量" }
+        var title: String { self == .recent ? String(localized: "Recent") : String(localized: "Traffic") }
     }
 
     @Published var selection: SidebarItem? = .allApps {
@@ -79,11 +78,11 @@ final class BrowserModel: ObservableObject {
             switch selection {
             case .app(let id): update(\.domains, try store.domains(appID: id, range: range))
             case .allApps: update(\.domains, try store.domains(appID: nil, range: range))
-            case .settings, nil: update(\.domains, [])
+            case nil: update(\.domains, [])
             }
             update(\.errorText, nil)
         } catch {
-            errorText = "读取数据失败：\(error.localizedDescription)"
+            errorText = String(localized: "Failed to read data: \(error.localizedDescription)")
         }
         reloadDetail()
     }
@@ -110,7 +109,7 @@ final class BrowserModel: ObservableObject {
                                                    since: Date().addingTimeInterval(-7 * 86_400)))
             update(\.detailApps, selectedAppID == nil ? try store.apps(range: range, domain: domain) : [])
         } catch {
-            errorText = "读取数据失败：\(error.localizedDescription)"
+            errorText = String(localized: "Failed to read data: \(error.localizedDescription)")
         }
     }
 

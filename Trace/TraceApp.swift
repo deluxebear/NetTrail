@@ -31,12 +31,18 @@ struct TraceApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("Trace", id: "main") {
+        Window("NetTrail", id: "main") {
             MainWindow()
                 .environmentObject(model)
                 .environmentObject(model.extensionManager)
         }
         .defaultSize(width: 1100, height: 680)
+
+        Settings {
+            SettingsView()
+                .environmentObject(model)
+                .environmentObject(model.extensionManager)
+        }
     }
 }
 

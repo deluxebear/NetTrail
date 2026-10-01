@@ -62,12 +62,12 @@ final class ExtensionManager: NSObject, ObservableObject {
                 configuration.filterPackets = false
                 manager.providerConfiguration = configuration
             }
-            manager.localizedDescription = "Trace"
+            manager.localizedDescription = String(localized: "NetTrail")
             manager.isEnabled = true
             try await manager.saveToPreferences()
             lastError = nil
         } catch {
-            lastError = "启用内容过滤失败：\(error.localizedDescription)"
+            lastError = String(localized: "Failed to enable the content filter: \(error.localizedDescription)")
         }
         await loadFilterState()
     }
@@ -78,7 +78,7 @@ final class ExtensionManager: NSObject, ObservableObject {
             try await manager.loadFromPreferences()
             try await manager.removeFromPreferences()
         } catch {
-            lastError = "移除过滤配置失败：\(error.localizedDescription)"
+            lastError = String(localized: "Failed to remove the filter configuration: \(error.localizedDescription)")
         }
         await loadFilterState()
         submit(.deactivationRequest(forExtensionWithIdentifier: extensionID, queue: .main), kind: .deactivation)

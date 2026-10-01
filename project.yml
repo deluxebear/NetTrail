@@ -25,11 +25,15 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(TRACE_BUNDLE_ID)
-        PRODUCT_NAME: Trace
+        PRODUCT_NAME: NetTrail
+        PRODUCT_MODULE_NAME: Trace
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: Trace/Info.plist
       properties:
-        CFBundleDisplayName: Trace
+        CFBundleName: NetTrail
+        CFBundleDisplayName: NetTrail
+        LSHasLocalizedDisplayName: true
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSUIElement: true
@@ -59,12 +63,12 @@ targets:
     info:
       path: TraceFilter/Info.plist
       properties:
-        CFBundleDisplayName: TraceFilter
+        CFBundleDisplayName: NetTrail Filter
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundlePackageType: SYSX
         TraceTeamID: $(TRACE_TEAM_ID)
-        NSSystemExtensionUsageDescription: Trace 通过内容过滤器记录各 App 访问的网络域名，不会拦截任何连接。
+        NSSystemExtensionUsageDescription: NetTrail uses a content filter to record the domains each app connects to. It never blocks any connection.
         NetworkExtension:
           NEMachServiceName: $(TRACE_MACH_SERVICE)
           NEProviderClasses:

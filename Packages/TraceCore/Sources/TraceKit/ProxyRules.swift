@@ -11,7 +11,7 @@ public enum ProxyRuleFormat: String, CaseIterable, Identifiable, Sendable {
         case .clash: "Clash / Mihomo"
         case .surge: "Surge / Loon"
         case .singBox: "sing-box"
-        case .plain: "纯列表"
+        case .plain: String(localized: "Plain List")
         }
     }
 }

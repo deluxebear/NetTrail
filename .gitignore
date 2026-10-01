@@ -6,3 +6,4 @@ build/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 Trace.xcodeproj/
 .superpowers/
+.swiftpm/

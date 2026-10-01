@@ -15,6 +15,7 @@ private struct MainWindowContent: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var extensionManager: ExtensionManager
     @StateObject var browser: BrowserModel
+    @Environment(\.openSettings) private var openSettings
     @State private var showOnboarding = false
 
     init(browser: @autoclosure @escaping () -> BrowserModel) {
@@ -25,22 +26,25 @@ private struct MainWindowContent: View {
         NavigationSplitView {
             sidebar
         } content: {
-            if browser.selection == .settings {
-                SettingsView()
-            } else {
-                DomainTableView(browser: browser)
-                    .navigationSplitViewColumnWidth(min: 420, ideal: 620)
-            }
+            DomainTableView(browser: browser)
+                .navigationSplitViewColumnWidth(min: 420, ideal: 620)
         } detail: {
             DomainDetailView(browser: browser)
                 .navigationSplitViewColumnWidth(min: 260, ideal: 320)
         }
         .toolbar {
             ToolbarItem {
-                Picker("时间范围", selection: $browser.range) {
+                Picker("Time Range", selection: $browser.range) {
                     ForEach(TimeRange.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
+            }
+            ToolbarItem {
+                Button("Settings", systemImage: "gearshape") {
+                    openSettings()
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                .help("Settings (⌘,)")
             }
         }
         .safeAreaInset(edge: .top) { banners }
@@ -66,7 +70,7 @@ private struct MainWindowContent: View {
 
     private var sidebar: some View {
         List(selection: $browser.selection) {
-            Label("全部 App", systemImage: "square.grid.2x2").tag(BrowserModel.SidebarItem.allApps)
+            Label("All Apps", systemImage: "square.grid.2x2").tag(BrowserModel.SidebarItem.allApps)
             Section("App") {
                 let ambiguous = browser.ambiguousNames
                 ForEach(browser.filteredApps) { app in
@@ -79,13 +83,13 @@ private struct MainWindowContent: View {
                                     .font(.caption).foregroundStyle(.secondary)
                                     .lineLimit(1).truncationMode(.middle)
                             }
-                            Text("\(app.domainCount) 个域名 · \(Formatting.bytes(app.bytesIn + app.bytesOut))")
+                            Text("\(app.domainCount) domains · \(Formatting.bytes(app.bytesIn + app.bytesOut))")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     .help(app.path ?? app.key)
                     .contextMenu {
-                        Menu("复制连接（不含局域网）") {
+                        Menu("Copy Connections (Excluding LAN)") {
                             ForEach(ProxyRuleFormat.allCases) { format in
                                 Button(format.title) { copyRules(appID: app.id, format: format) }
                             }
@@ -94,11 +98,10 @@ private struct MainWindowContent: View {
                     .tag(BrowserModel.SidebarItem.app(app.id))
                 }
             }
-            Label("设置", systemImage: "gearshape").tag(BrowserModel.SidebarItem.settings)
         }
-        .searchable(text: $browser.search, placement: .sidebar, prompt: "搜索 App")
+        .searchable(text: $browser.search, placement: .sidebar, prompt: "Search Apps")
         .safeAreaInset(edge: .bottom) {
-            Picker("排序", selection: $browser.appSort) {
+            Picker("Sort", selection: $browser.appSort) {
                 ForEach(BrowserModel.AppSort.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
@@ -118,16 +121,16 @@ private struct MainWindowContent: View {
     private var banners: some View {
         VStack(spacing: 4) {
             if let backup = model.storeBackupURL {
-                banner("数据库无法打开，已备份到 \(backup.lastPathComponent) 并新建空数据库。")
+                banner(String(localized: "The database couldn’t be opened. It was backed up to \(backup.lastPathComponent) and a new empty database was created."))
             }
             if let error = model.writeError ?? browser.errorText {
                 banner(error)
             }
             if model.status == .disconnected {
-                banner("扩展未连接，正在重试…")
+                banner(String(localized: "Extension not connected. Retrying…"))
             }
             if model.droppedTotal > 0 {
-                banner("有 \(model.droppedTotal) 条事件因缓冲区已满而丢失。")
+                banner(String(localized: "\(model.droppedTotal) events were dropped because the buffer was full."))
             }
         }
     }

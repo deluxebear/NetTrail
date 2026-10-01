@@ -98,7 +98,7 @@ final class AppModel: ObservableObject {
             try await ingestor.deleteAll()
             dataVersion &+= 1
         } catch {
-            writeError = "清空数据失败：\(error.localizedDescription)"
+            writeError = String(localized: "Failed to clear data: \(error.localizedDescription)")
         }
     }
 
@@ -118,7 +118,7 @@ final class AppModel: ObservableObject {
             update(\.isConnected, true)
             backoff = 1
             let result = await ingestor.ingest(batch, paused: isPaused, now: Date())
-            update(\.writeError, result.error.map { "写入数据库失败：\($0.localizedDescription)" })
+            update(\.writeError, result.error.map { String(localized: "Failed to write to the database: \($0.localizedDescription)") })
             update(\.droppedTotal, result.droppedTotal)
             update(\.recent.apps, result.recent)
             if !batch.events.isEmpty { dataVersion &+= 1 }

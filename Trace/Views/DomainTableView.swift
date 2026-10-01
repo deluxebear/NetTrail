@@ -12,31 +12,31 @@ struct DomainTableView: View {
         }
         .overlay {
             if browser.domains.isEmpty {
-                ContentUnavailableView("暂无记录", systemImage: "network",
-                                       description: Text("所选时间范围内没有网络连接。"))
+                ContentUnavailableView("No Records", systemImage: "network",
+                                       description: Text("No network connections in the selected time range."))
             }
         }
     }
 
     private func table(now: Date) -> some View {
         Table(browser.domains.sorted(using: sortOrder), selection: $browser.selectedDomain, sortOrder: $sortOrder) {
-            TableColumn("域名", value: \.domain) { row in
+            TableColumn("Domain", value: \.domain) { row in
                 HStack(spacing: 4) {
                     Text(row.domain).lineLimit(1)
                     if !row.resolved {
-                        Label("未解析", systemImage: "exclamationmark.triangle")
+                        Label("Unresolved", systemImage: "exclamationmark.triangle")
                             .font(.caption).foregroundStyle(.orange)
                     }
                 }
             }
             .width(min: 220, ideal: 320)
-            TableColumn("连接数", value: \.connCount) { Text("\($0.connCount)").monospacedDigit() }
+            TableColumn("Connections", value: \.connCount) { Text("\($0.connCount)").monospacedDigit() }
                 .width(70)
-            TableColumn("↓ 流量", value: \.bytesIn) { Text(Formatting.bytes($0.bytesIn)).monospacedDigit() }
+            TableColumn("↓ Traffic", value: \.bytesIn) { Text(Formatting.bytes($0.bytesIn)).monospacedDigit() }
                 .width(80)
-            TableColumn("↑ 流量", value: \.bytesOut) { Text(Formatting.bytes($0.bytesOut)).monospacedDigit() }
+            TableColumn("↑ Traffic", value: \.bytesOut) { Text(Formatting.bytes($0.bytesOut)).monospacedDigit() }
                 .width(80)
-            TableColumn("最近", value: \.lastSeen) { Text(Formatting.relative($0.lastSeen, now: now)) }
+            TableColumn("Last Seen", value: \.lastSeen) { Text(Formatting.relative($0.lastSeen, now: now)) }
                 .width(90)
         }
     }

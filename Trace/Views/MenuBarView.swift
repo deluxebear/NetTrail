@@ -7,30 +7,38 @@ struct MenuBarView: View {
     @EnvironmentObject private var recent: RecentFeed
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openSettings) private var openSettings
     @State private var expandedKey: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
             if model.status == .needsSetup || model.status == .disconnected {
-                Button("修复…") { openMain() }
+                Button("Fix…") { openMain() }
             }
             if model.droppedTotal > 0 {
-                Text("有 \(model.droppedTotal) 条事件丢失").font(.caption).foregroundStyle(.orange)
+                Text("\(model.droppedTotal) events dropped").font(.caption).foregroundStyle(.orange)
             }
-            Text("最近 5 分钟").font(.caption).foregroundStyle(.secondary)
+            Text("Last 5 Minutes").font(.caption).foregroundStyle(.secondary)
             if recent.apps.isEmpty {
-                Text("暂无网络活动").foregroundStyle(.secondary).padding(.vertical, 4)
+                Text("No network activity").foregroundStyle(.secondary).padding(.vertical, 4)
             }
             ForEach(recent.apps) { app in
                 row(app)
             }
             Divider()
             HStack {
-                Button("打开主窗口") { openMain() }
-                Button(model.isPaused ? "继续记录" : "暂停记录") { model.isPaused.toggle() }
+                Button("Open Main Window") { openMain() }
+                Button(model.isPaused ? "Resume Recording" : "Pause Recording") { model.isPaused.toggle() }
                 Spacer()
-                Button("退出") { NSApp.terminate(nil) }
+                Button("Settings", systemImage: "gearshape") {
+                    dismiss()
+                    openSettings()
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                .labelStyle(.iconOnly)
+                .help("Settings")
+                Button("Quit") { NSApp.terminate(nil) }
             }
         }
         .padding(12)
@@ -39,7 +47,7 @@ struct MenuBarView: View {
 
     private var header: some View {
         HStack {
-            Text("Trace").font(.headline)
+            Text("NetTrail").font(.headline)
             if totalRateIn + totalRateOut >= 1 {
                 Text("↓ \(Formatting.rate(totalRateIn))  ↑ \(Formatting.rate(totalRateOut))")
                     .font(.caption).monospacedDigit().foregroundStyle(.secondary)
@@ -62,7 +70,7 @@ struct MenuBarView: View {
                 if app.rateIn + app.rateOut >= 1 {
                     Text("↓ \(Formatting.rate(app.rateIn))").monospacedDigit().foregroundStyle(.secondary)
                 }
-                Text("\(app.domains.count) 个域名").foregroundStyle(.secondary)
+                Text("\(app.domains.count) domains").foregroundStyle(.secondary)
                 Image(systemName: expandedKey == app.key ? "chevron.down" : "chevron.right")
                     .foregroundStyle(.secondary)
             }
@@ -74,7 +82,7 @@ struct MenuBarView: View {
                 ForEach(app.domains.prefix(10), id: \.self) { domain in
                     Text(domain).font(.caption).lineLimit(1)
                 }
-                Button("在主窗口中查看") {
+                Button("Show in Main Window") {
                     model.focusAppKey = app.key
                     openMain()
                 }

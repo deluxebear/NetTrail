@@ -16,7 +16,7 @@ enum Formatting {
         return formatter
     }()
 
-    /// “3 分钟前” relative to `now`; dates newer than `now` read as now.
+    /// “3 min. ago” relative to `now`; dates newer than `now` read as now.
     static func relative(_ date: Date, now: Date) -> String {
         relativeFormatter.localizedString(for: date, relativeTo: max(now, date))
     }
@@ -32,11 +32,11 @@ enum Formatting {
 extension HostSource {
     var title: String {
         switch self {
-        case .system: "系统提供"
+        case .system: String(localized: "System")
         case .sni: "TLS SNI"
         case .httpHost: "HTTP Host"
-        case .dnsCache: "DNS 缓存"
-        case .none: "未解析"
+        case .dnsCache: String(localized: "DNS cache")
+        case .none: String(localized: "Unresolved")
         }
     }
 }
@@ -44,10 +44,10 @@ extension HostSource {
 extension AppModel.MonitorStatus {
     var title: String {
         switch self {
-        case .monitoring: "监控中"
-        case .paused: "已暂停"
-        case .needsSetup: "需要设置"
-        case .disconnected: "扩展未连接"
+        case .monitoring: String(localized: "Monitoring")
+        case .paused: String(localized: "Paused")
+        case .needsSetup: String(localized: "Needs setup")
+        case .disconnected: String(localized: "Extension not connected")
         }
     }
 
