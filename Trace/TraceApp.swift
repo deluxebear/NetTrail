@@ -1,7 +1,21 @@
 import SwiftUI
 
+extension Notification.Name {
+    static let traceShowMainWindow = Notification.Name("TraceShowMainWindow")
+}
+
+/// Launching Trace again (Finder, Spotlight, `open`) while it runs shows the main window,
+/// since a menu bar app has no Dock icon to click.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        NotificationCenter.default.post(name: .traceShowMainWindow, object: nil)
+        return true
+    }
+}
+
 @main
 struct TraceApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = AppModel.live()
 
     var body: some Scene {
@@ -33,12 +47,16 @@ private struct MenuBarLabel: View {
 
     var body: some View {
         Image(systemName: model.menuBarSymbol)
-            .task {
-                await model.start()
-                if !extensionManager.isReady {
-                    openWindow(id: "main")
-                    NSApp.activate(ignoringOtherApps: true)
-                }
+            .task { await model.start() }
+            // The extension state arrives asynchronously after launch; open setup only once it is known.
+            .onChange(of: extensionManager.needsSetup, initial: true) { _, needsSetup in
+                if needsSetup { showMain() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .traceShowMainWindow)) { _ in showMain() }
+    }
+
+    private func showMain() {
+        openWindow(id: "main")
+        NSApp.activate(ignoringOtherApps: true)
     }
 }

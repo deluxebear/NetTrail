@@ -15,12 +15,17 @@ final class ExtensionManager: NSObject, ObservableObject {
     @Published private(set) var extensionState: ExtensionState = .unknown
     @Published private(set) var filterEnabled = false
     @Published private(set) var lastError: String?
+    /// An installed extension is being swapped for this app's build; readiness may flicker meanwhile.
+    @Published private(set) var isReplacing = false
 
     let extensionID = (Bundle.main.bundleIdentifier ?? "com.xiongyanlin.trace") + ".filter"
     private var requestKinds: [ObjectIdentifier: RequestKind] = [:]
     private var configObserver: NSObjectProtocol?
 
     var isReady: Bool { extensionState == .activated && filterEnabled }
+
+    /// Setup is known to be incomplete: not while the state is still loading or an update is in flight.
+    var needsSetup: Bool { extensionState != .unknown && !isReplacing && !isReady }
 
     /// Build number of the extension inside this app bundle.
     private var bundledExtensionVersion: String? {
@@ -111,6 +116,7 @@ extension ExtensionManager: OSSystemExtensionRequestDelegate {
                              didFinishWithResult result: OSSystemExtensionRequest.Result) {
         MainActor.assumeIsolated {
             let kind = requestKinds.removeValue(forKey: ObjectIdentifier(request))
+            if kind == .activation { isReplacing = false }
             switch kind {
             case .activation:
                 extensionState = .activated
@@ -126,6 +132,7 @@ extension ExtensionManager: OSSystemExtensionRequestDelegate {
     nonisolated func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
         MainActor.assumeIsolated {
             let kind = requestKinds.removeValue(forKey: ObjectIdentifier(request))
+            if kind == .activation { isReplacing = false }
             if kind == .properties {
                 if extensionState == .unknown { extensionState = .notInstalled }
             } else {
@@ -142,6 +149,7 @@ extension ExtensionManager: OSSystemExtensionRequestDelegate {
                 extensionState = .activated
                 // The app was updated but the system still runs the old extension: ask to replace it.
                 if let bundled = bundledExtensionVersion, active.bundleVersion != bundled {
+                    isReplacing = true
                     install()
                 }
             } else if properties.contains(where: { $0.isAwaitingUserApproval }) {
