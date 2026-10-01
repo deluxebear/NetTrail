@@ -82,6 +82,41 @@ func app(_ key: String, name: String? = nil, path: String = "/Applications/X.app
         #expect(try store.apps(range: .all, now: t0).first?.bytesIn == Int64.max)
     }
 
+    @Test func repeatedOpsInOneBatchAreMerged() throws {
+        let store = try Store.inMemory()
+        try store.apply([
+            .open(app: app("com.a"), domain: "d.com", resolved: false, source: .dnsCache, time: t0.addingTimeInterval(20)),
+            .open(app: app("com.a"), domain: "d.com", resolved: true, source: .sni, time: t0.addingTimeInterval(10)),
+            .open(app: app("com.a", name: "Middle"), domain: "d.com", resolved: true, source: .httpHost, time: t0.addingTimeInterval(30)),
+            .open(app: app("com.a"), domain: "d.com", resolved: true, source: .sni, time: t0.addingTimeInterval(3600)),
+            .close(appKey: "com.a", domain: "d.com", time: t0.addingTimeInterval(40), bytesIn: 5, bytesOut: 1),
+            .close(appKey: "com.a", domain: "d.com", time: t0.addingTimeInterval(50), bytesIn: 7, bytesOut: 2),
+        ])
+        let apps = try store.apps(range: .all, now: t0)
+        #expect(apps.count == 1)
+        #expect(apps[0].displayName == "com.a" && apps[0].connCount == 4 && apps[0].bytesIn == 12 && apps[0].bytesOut == 3)
+        let domain = try #require(try store.domains(appID: nil, range: .all, now: t0).first)
+        #expect(domain.lastSource == .sni && domain.resolved)
+        #expect(domain.firstSeen == t0.addingTimeInterval(10) && domain.lastSeen == t0.addingTimeInterval(3600))
+        let points = try store.hourly(appID: nil, domain: "d.com", since: t0)
+        #expect(points.map(\.connCount) == [3, 1])
+        #expect(points.map(\.bytesIn) == [12, 0])
+    }
+
+    @Test func mergedByteSumsSaturate() throws {
+        let store = try Store.inMemory()
+        try store.apply([
+            .open(app: app("com.a"), domain: "d.com", resolved: true, source: .sni, time: t0),
+            .close(appKey: "com.a", domain: "d.com", time: t0, bytesIn: .max, bytesOut: 1),
+            .close(appKey: "com.a", domain: "d.com", time: t0, bytesIn: .max, bytesOut: 1),
+        ])
+        try store.apply([.close(appKey: "com.a", domain: "d.com", time: t0, bytesIn: 1, bytesOut: 1)])
+        let summary = try #require(try store.apps(range: .all, now: t0).first)
+        #expect(summary.bytesIn == Int64.max && summary.bytesOut == 3)
+        let domain = try #require(try store.domains(appID: nil, range: .all, now: t0).first)
+        #expect(domain.bytesIn == Int64.max)
+    }
+
     @Test func closeForUnknownAppIsIgnored() throws {
         let store = try Store.inMemory()
         try store.apply([.close(appKey: "nobody", domain: "d.com", time: t0, bytesIn: 1, bytesOut: 1)])

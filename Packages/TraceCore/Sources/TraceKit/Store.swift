@@ -74,59 +74,85 @@ public final class Store: Sendable {
 
     // MARK: Writes
 
+    /// SQL for `column + value` that saturates at Int64.max; plain `+` would overflow into a REAL.
+    private static func saturatingSum(_ column: String, _ value: String) -> String {
+        "CASE WHEN \(column) > 9223372036854775807 - \(value) THEN 9223372036854775807 ELSE \(column) + \(value) END"
+    }
+
     public func apply(_ ops: [StoreOp]) throws {
         guard !ops.isEmpty else { return }
+        let merged = MergedOps(ops)
         try queue.write { db in
             var ids: [String: Int64] = [:]
-            func appID(_ key: String) throws -> Int64? {
-                if let cached = ids[key] { return cached }
-                let found = try Int64.fetchOne(db, sql: "SELECT id FROM app WHERE identity_key = ?", arguments: [key])
-                ids[key] = found
-                return found
+            let upsertApp = try db.cachedStatement(sql: """
+                INSERT INTO app (identity_key, bundle_id, display_name, path, team_id, first_seen, last_seen)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(identity_key) DO UPDATE SET
+                  bundle_id = excluded.bundle_id, display_name = excluded.display_name,
+                  path = excluded.path, team_id = excluded.team_id,
+                  last_seen = MAX(last_seen, excluded.last_seen)
+                RETURNING id
+                """)
+            for (key, row) in merged.apps {
+                let app = row.app
+                ids[key] = try Int64.fetchOne(upsertApp, arguments: [
+                    key, app.bundleID, app.displayName, app.path, app.teamID,
+                    row.firstSeen.timeIntervalSince1970, row.lastSeen.timeIntervalSince1970,
+                ])
             }
-            for op in ops {
-                switch op {
-                case let .open(app, domain, resolved, source, time):
-                    let t = time.timeIntervalSince1970
-                    try db.execute(sql: """
-                        INSERT INTO app (identity_key, bundle_id, display_name, path, team_id, first_seen, last_seen)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(identity_key) DO UPDATE SET
-                          bundle_id = excluded.bundle_id, display_name = excluded.display_name,
-                          path = excluded.path, team_id = excluded.team_id,
-                          last_seen = MAX(last_seen, excluded.last_seen)
-                        """, arguments: [app.key, app.bundleID, app.displayName, app.path, app.teamID, t, t])
-                    ids[app.key] = nil
-                    guard let id = try appID(app.key) else { continue }
-                    try db.execute(sql: """
-                        INSERT INTO app_domain (app_id, domain, resolved, last_source, first_seen, last_seen, conn_count)
-                        VALUES (?, ?, ?, ?, ?, ?, 1)
-                        ON CONFLICT(app_id, domain) DO UPDATE SET
-                          conn_count = conn_count + 1,
-                          resolved = excluded.resolved, last_source = excluded.last_source,
-                          last_seen = MAX(last_seen, excluded.last_seen)
-                        """, arguments: [id, domain, resolved, source.rawValue, t, t])
-                    try db.execute(sql: """
-                        INSERT INTO app_domain_hourly (app_id, domain, hour, conn_count) VALUES (?, ?, ?, 1)
-                        ON CONFLICT(app_id, domain, hour) DO UPDATE SET conn_count = conn_count + 1
-                        """, arguments: [id, domain, Self.hour(time)])
-                case let .close(appKey, domain, time, bytesIn, bytesOut):
-                    guard let id = try appID(appKey) else { continue }
-                    let t = time.timeIntervalSince1970
-                    let inBytes = Int64(clamping: bytesIn)
-                    let outBytes = Int64(clamping: bytesOut)
-                    try db.execute(sql: """
-                        UPDATE app_domain SET bytes_in = bytes_in + ?, bytes_out = bytes_out + ?,
-                          last_seen = MAX(last_seen, ?)
-                        WHERE app_id = ? AND domain = ?
-                        """, arguments: [inBytes, outBytes, t, id, domain])
-                    try db.execute(sql: """
-                        INSERT INTO app_domain_hourly (app_id, domain, hour, bytes_in, bytes_out) VALUES (?, ?, ?, ?, ?)
-                        ON CONFLICT(app_id, domain, hour) DO UPDATE SET
-                          bytes_in = bytes_in + excluded.bytes_in, bytes_out = bytes_out + excluded.bytes_out
-                        """, arguments: [id, domain, Self.hour(time), inBytes, outBytes])
-                    try db.execute(sql: "UPDATE app SET last_seen = MAX(last_seen, ?) WHERE id = ?", arguments: [t, id])
-                }
+            let findApp = try db.cachedStatement(sql: "SELECT id FROM app WHERE identity_key = ?")
+            for key in merged.appCloses.keys where ids[key] == nil {
+                ids[key] = try Int64.fetchOne(findApp, arguments: [key])
+            }
+
+            let upsertDomain = try db.cachedStatement(sql: """
+                INSERT INTO app_domain (app_id, domain, resolved, last_source, first_seen, last_seen, conn_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(app_id, domain) DO UPDATE SET
+                  conn_count = conn_count + excluded.conn_count,
+                  resolved = excluded.resolved, last_source = excluded.last_source,
+                  last_seen = MAX(last_seen, excluded.last_seen)
+                """)
+            for (key, open) in merged.opens {
+                guard let id = ids[key.appKey] else { continue }
+                try upsertDomain.execute(arguments: [
+                    id, key.domain, open.resolved, open.source.rawValue,
+                    open.firstSeen.timeIntervalSince1970, open.lastSeen.timeIntervalSince1970, open.count,
+                ])
+            }
+
+            let closeDomain = try db.cachedStatement(sql: """
+                UPDATE app_domain SET
+                  bytes_in = \(Self.saturatingSum("bytes_in", ":in")),
+                  bytes_out = \(Self.saturatingSum("bytes_out", ":out")),
+                  last_seen = MAX(last_seen, :t)
+                WHERE app_id = :id AND domain = :domain
+                """)
+            for (key, close) in merged.closes {
+                guard let id = ids[key.appKey] else { continue }
+                try closeDomain.execute(arguments: [
+                    "in": close.bytesIn, "out": close.bytesOut, "t": close.lastSeen.timeIntervalSince1970,
+                    "id": id, "domain": key.domain,
+                ])
+            }
+
+            let touchApp = try db.cachedStatement(sql: "UPDATE app SET last_seen = MAX(last_seen, ?) WHERE id = ?")
+            for (key, time) in merged.appCloses {
+                guard let id = ids[key] else { continue }
+                try touchApp.execute(arguments: [time.timeIntervalSince1970, id])
+            }
+
+            let upsertHour = try db.cachedStatement(sql: """
+                INSERT INTO app_domain_hourly (app_id, domain, hour, conn_count, bytes_in, bytes_out)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(app_id, domain, hour) DO UPDATE SET
+                  conn_count = conn_count + excluded.conn_count,
+                  bytes_in = \(Self.saturatingSum("bytes_in", "excluded.bytes_in")),
+                  bytes_out = \(Self.saturatingSum("bytes_out", "excluded.bytes_out"))
+                """)
+            for (key, counts) in merged.hours {
+                guard let id = ids[key.appKey] else { continue }
+                try upsertHour.execute(arguments: [id, key.domain, key.hour, counts.conn, counts.bytesIn, counts.bytesOut])
             }
         }
     }
