@@ -55,6 +55,20 @@ import Testing
         _ = ProcessInspector.origin(pid: pid)
     }
 
+    @Test func readsSigningIdentityFromKernel() {
+        // Test runners are at least ad-hoc signed, so the kernel knows an identifier.
+        #expect(ProcessInspector.signingIdentity(pid: getpid()).signingID?.isEmpty == false)
+        #expect(ProcessInspector.signingIdentity(pid: 99_999_999).signingID == nil)
+    }
+
+    @Test func parsesCodeSigningBlob() {
+        let text = Array("com.anthropic.claude-code".utf8) + [0]
+        let blob: [UInt8] = [0xFA, 0xDE, 0x0C, 0x02, 0, 0, 0, UInt8(8 + text.count)] + text
+        #expect(ProcessInspector.blobString(blob) == "com.anthropic.claude-code")
+        #expect(ProcessInspector.blobString([0, 0, 0, 0, 0, 0, 0, 8]) == nil)
+        #expect(ProcessInspector.blobString([1, 2]) == nil)
+    }
+
     @Test func missingProcessYieldsEmptyOrigin() {
         let origin = ProcessInspector.origin(pid: 99_999_999)
         #expect(origin == ProcessOrigin(responsiblePath: nil, ancestors: [], script: nil))

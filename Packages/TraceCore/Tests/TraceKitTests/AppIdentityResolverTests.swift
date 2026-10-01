@@ -40,10 +40,28 @@ private func makeFakeApp(named name: String, bundleID: String) throws -> URL {
         #expect(resolved.path == "/usr/bin/curl")
     }
 
+    @Test func bareSigningIDUsesPath() {
+        let resolved = AppIdentityResolver().resolve(AppIdentity(
+            signingID: "node", teamID: "HX7739G8FX", bundleID: nil, executablePath: "/Users/a/.hermes/node/bin/node", pid: 1))
+        #expect(resolved.key == "/Users/a/.hermes/node/bin/node")
+        #expect(resolved.displayName == "node" && resolved.teamID == "HX7739G8FX")
+    }
+
     @Test func unsignedToolUsesPath() {
         let resolved = AppIdentityResolver().resolve(AppIdentity(
             signingID: nil, teamID: nil, bundleID: nil, executablePath: "/opt/tool/bin/thing", pid: 1))
         #expect(resolved.key == "/opt/tool/bin/thing")
         #expect(resolved.displayName == "thing")
+    }
+
+    @Test(arguments: [
+        ("/Users/a/.local/share/claude/versions/2.1.286", "claude"),
+        ("/opt/tool/1.2.3/bin/4.5", "tool"),
+        ("/opt/homebrew/Cellar/git/2.55.0/libexec/git-core/git-remote-http", "git-remote-http"),
+        ("/usr/local/bin/python3.12", "python3.12"),
+        ("/9.9", "9.9"),
+    ])
+    func versionNamedExecutableUsesFolderName(path: String, expected: String) {
+        #expect(AppIdentityResolver.toolName(forExecutableAt: path) == expected)
     }
 }

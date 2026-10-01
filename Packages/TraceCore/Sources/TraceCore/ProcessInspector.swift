@@ -66,6 +66,39 @@ public enum ProcessInspector {
         responsibleFunction.map { $0(pid) }
     }
 
+    // MARK: Code signing
+
+    private typealias CsopsFunction = @convention(c) (pid_t, UInt32, UnsafeMutableRawPointer?, Int) -> Int32
+
+    /// `csops` has no public header, so it is looked up at runtime.
+    private static let csops: CsopsFunction? = {
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "csops") else { return nil }
+        return unsafeBitCast(symbol, to: CsopsFunction.self)
+    }()
+
+    private static let csOpsIdentity: UInt32 = 11
+    private static let csOpsTeamID: UInt32 = 14
+
+    /// Signing identifier and team ID as the kernel recorded them at exec. Unlike the Security
+    /// framework this reads no file, which the sandboxed extension often may not open.
+    public static func signingIdentity(pid: pid_t) -> (signingID: String?, teamID: String?) {
+        (csopsString(pid, csOpsIdentity), csopsString(pid, csOpsTeamID))
+    }
+
+    private static func csopsString(_ pid: pid_t, _ operation: UInt32) -> String? {
+        guard let csops else { return nil }
+        var buffer = [UInt8](repeating: 0, count: 1024)
+        guard csops(pid, operation, &buffer, buffer.count) == 0 else { return nil }
+        return blobString(buffer)
+    }
+
+    /// Payload of a csops blob: an 8-byte header (magic, length) then a NUL-terminated string.
+    static func blobString(_ bytes: [UInt8]) -> String? {
+        guard bytes.count > 8 else { return nil }
+        let payload = bytes[8...].prefix { $0 != 0 }
+        return payload.isEmpty ? nil : String(decoding: payload, as: UTF8.self)
+    }
+
     // MARK: Arguments
 
     public static func arguments(pid: pid_t) -> [String]? {

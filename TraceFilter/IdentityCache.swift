@@ -31,13 +31,11 @@ final class IdentityCache {
         var code: SecCode?
         let attributes = [kSecGuestAttributeAudit: token] as CFDictionary
         guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess, let code else {
-            return AppIdentity(signingID: nil, teamID: nil, bundleID: nil,
-                               executablePath: ProcessInspector.executablePath(pid) ?? "unknown", pid: pid)
+            return kernelIdentity(pid)
         }
         var staticCode: SecStaticCode?
         guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else {
-            return AppIdentity(signingID: nil, teamID: nil, bundleID: nil,
-                               executablePath: ProcessInspector.executablePath(pid) ?? "unknown", pid: pid)
+            return kernelIdentity(pid)
         }
         var info: CFDictionary?
         SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info)
@@ -46,9 +44,22 @@ final class IdentityCache {
         SecCodeCopyPath(staticCode, [], &url)
         let path = (url as URL?)?.path ?? ProcessInspector.executablePath(pid) ?? "unknown"
         let plist = dict[kSecCodeInfoPList as String] as? [String: Any]
-        return AppIdentity(signingID: dict[kSecCodeInfoIdentifier as String] as? String,
+        guard let signingID = dict[kSecCodeInfoIdentifier as String] as? String else {
+            // Reading signing info opens the executable, which the sandbox denies outside a few
+            // system locations; the kernel's copy of the identity works everywhere.
+            let kernel = ProcessInspector.signingIdentity(pid: pid)
+            return AppIdentity(signingID: kernel.signingID, teamID: kernel.teamID, bundleID: nil,
+                               executablePath: path, pid: pid)
+        }
+        return AppIdentity(signingID: signingID,
                            teamID: dict[kSecCodeInfoTeamIdentifier as String] as? String,
                            bundleID: plist?["CFBundleIdentifier"] as? String,
                            executablePath: path, pid: pid)
+    }
+
+    private static func kernelIdentity(_ pid: pid_t) -> AppIdentity {
+        let kernel = ProcessInspector.signingIdentity(pid: pid)
+        return AppIdentity(signingID: kernel.signingID, teamID: kernel.teamID, bundleID: nil,
+                           executablePath: ProcessInspector.executablePath(pid) ?? "unknown", pid: pid)
     }
 }
