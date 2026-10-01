@@ -15,7 +15,7 @@ profile_name() { security cms -D -i "$1" | plutil -extract Name raw -o - -; }
 install_profile() {
   local dir="$HOME/Library/MobileDevice/Provisioning Profiles"; mkdir -p "$dir"
   local uuid; uuid="$(security cms -D -i "$1" | plutil -extract UUID raw -o - -)"
-  cp "$1" "$dir/$uuid.provisioningprofile"
+  cp "$1" "$dir/$uuid.provisionprofile"
 }
 install_profile "$APP_PROFILE"; install_profile "$FILTER_PROFILE"
 
