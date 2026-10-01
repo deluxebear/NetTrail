@@ -46,17 +46,18 @@ final class FilterDataProvider: NEFilterDataProvider {
             return .filterDataVerdict(withFilterInbound: true, peekInboundBytes: Self.dnsPeekBytes,
                                       filterOutbound: false, peekOutboundBytes: 0)
         }
-        let app = identities.identity(for: flow.sourceAppAuditToken ?? socketFlow.sourceProcessAuditToken)
+        let source = identities.source(for: flow.sourceAppAuditToken ?? socketFlow.sourceProcessAuditToken)
         let now = Date()
+        let pending = PendingOpen(app: source.identity, origin: source.origin, remote: remote, startedAt: now)
         if let host = HostNormalizer.normalizeDomain(socketFlow.remoteHostname) {
-            emit(flow.identifier, app: app, remote: remote, host: host, source: .system, time: now)
+            emit(flow.identifier, pending, host: host, source: .system)
             return Self.allowAndReport()
         }
         guard remote.proto == .tcp else {
-            emitFallback(flow.identifier, PendingOpen(app: app, remote: remote, startedAt: now), now: now)
+            emitFallback(flow.identifier, pending, now: now)
             return Self.allowAndReport()
         }
-        peeks.begin(flow.identifier, PendingOpen(app: app, remote: remote, startedAt: now))
+        peeks.begin(flow.identifier, pending)
         let verdict = NEFilterNewFlowVerdict.filterDataVerdict(
             withFilterInbound: false, peekInboundBytes: 0,
             filterOutbound: true, peekOutboundBytes: PayloadSniffer.maxPeekBytes)
@@ -70,7 +71,7 @@ final class FilterDataProvider: NEFilterDataProvider {
         switch PayloadSniffer.sniff(pending.buffer) {
         case let .found(host, source):
             if let taken = peeks.take(flow.identifier) {
-                emit(flow.identifier, app: taken.app, remote: taken.remote, host: host, source: source, time: taken.startedAt)
+                emit(flow.identifier, taken, host: host, source: source)
             }
             return Self.dataAllowAndReport()
         case .needMore where pending.buffer.count < PayloadSniffer.maxPeekBytes
@@ -124,15 +125,16 @@ final class FilterDataProvider: NEFilterDataProvider {
         return verdict
     }
 
-    private func emit(_ id: UUID, app: AppIdentity, remote: Endpoint, host: String?, source: HostSource, time: Date) {
-        ring.append(.opened(FlowOpened(flowID: id, time: time, app: app, remote: remote, host: host, hostSource: source)))
+    private func emit(_ id: UUID, _ pending: PendingOpen, host: String?, source: HostSource) {
+        ring.append(.opened(FlowOpened(flowID: id, time: pending.startedAt, app: pending.app, origin: pending.origin,
+                                       remote: pending.remote, host: host, hostSource: source)))
     }
 
     private func emitFallback(_ id: UUID, _ pending: PendingOpen, now: Date) {
         if let host = dnsCache.lookup(ip: pending.remote.ip, now: now) {
-            emit(id, app: pending.app, remote: pending.remote, host: host, source: .dnsCache, time: pending.startedAt)
+            emit(id, pending, host: host, source: .dnsCache)
         } else {
-            emit(id, app: pending.app, remote: pending.remote, host: nil, source: .none, time: pending.startedAt)
+            emit(id, pending, host: nil, source: .none)
         }
     }
 

@@ -26,6 +26,7 @@ final class BrowserModel: ObservableObject {
     @Published private(set) var domains: [DomainSummary] = []
     @Published private(set) var detailHours: [HourPoint] = []
     @Published private(set) var detailApps: [AppSummary] = []
+    @Published private(set) var detailOrigins: [OriginSummary] = []
     @Published private(set) var errorText: String?
 
     private let store: Store
@@ -44,6 +45,18 @@ final class BrowserModel: ObservableObject {
     var selectedAppID: Int64? {
         if case .app(let id) = selection { return id }
         return nil
+    }
+
+    var selectedApp: AppSummary? {
+        selectedAppID.flatMap { id in apps.first { $0.id == id } }
+    }
+
+    /// Display names shared by more than one app (e.g. several `node` installs), which need a location hint.
+    var ambiguousNames: Set<String> {
+        var seen: Set<String> = []
+        var duplicates: Set<String> = []
+        for app in apps where !seen.insert(app.displayName).inserted { duplicates.insert(app.displayName) }
+        return duplicates
     }
 
     func reload() {
@@ -72,12 +85,17 @@ final class BrowserModel: ObservableObject {
     }
 
     private func reloadDetail() {
-        guard let domain = selectedDomain else {
-            detailHours = []
-            detailApps = []
-            return
-        }
         do {
+            if selectedDomain != nil || selectedAppID != nil {
+                detailOrigins = try store.origins(appID: selectedAppID, domain: selectedDomain, range: range)
+            } else {
+                detailOrigins = []
+            }
+            guard let domain = selectedDomain else {
+                detailHours = []
+                detailApps = []
+                return
+            }
             detailHours = try store.hourly(appID: selectedAppID, domain: domain,
                                            since: Date().addingTimeInterval(-7 * 86_400))
             detailApps = selectedAppID == nil ? try store.apps(range: range, domain: domain) : []

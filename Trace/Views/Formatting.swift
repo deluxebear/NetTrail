@@ -5,6 +5,13 @@ enum Formatting {
     static func bytes(_ value: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: value, countStyle: .file)
     }
+
+    /// Containing folder with the home directory shown as `~`, e.g. `~/.hermes/node/bin`.
+    static func location(_ path: String) -> String {
+        let folder = (path as NSString).deletingLastPathComponent
+        let home = NSHomeDirectory()
+        return folder.hasPrefix(home) ? "~" + folder.dropFirst(home.count) : folder
+    }
 }
 
 extension HostSource {

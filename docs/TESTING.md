@@ -18,3 +18,5 @@
 8. App 未运行：退出 Trace，curl 几个站点，重新打开 Trace，这些记录被补上。
 9. 性能：分别在关闭/开启过滤时运行 `networkQuality -s`，吞吐差异 < 10%。
 10. 日志：`log stream --predicate 'subsystem == "com.xiongyanlin.trace.filter"'` 无持续错误。
+11. 调用来源：在终端运行 `curl -s https://example.com >/dev/null`，主窗口选中 curl → example.com，“调用来源”显示“经由 <终端 App>”和进程链（如 `zsh ← login ← ghostty`）；运行 `node -e "fetch('https://example.com')"` 时不显示脚本（内联代码不采集），运行 `node some-script.js` 时显示脚本路径。若来源全部为空，说明沙盒拦截了 `proc_pidinfo`/`KERN_PROCARGS2`——记录此结论。
+12. 同名 App：有多个 `node` 时，侧边栏每项下方显示所在目录，悬停显示完整路径。

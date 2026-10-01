@@ -65,6 +65,19 @@ public final class Store: Sendable {
                 CREATE INDEX app_domain_hourly_domain ON app_domain_hourly(domain, hour);
                 """)
         }
+        migrator.registerMigration("v2-origin") { db in
+            try db.execute(sql: """
+                CREATE TABLE app_origin (
+                  app_id INTEGER NOT NULL, domain TEXT NOT NULL,
+                  via TEXT NOT NULL, script TEXT NOT NULL,
+                  via_path TEXT, chain TEXT NOT NULL,
+                  first_seen REAL NOT NULL, last_seen REAL NOT NULL,
+                  conn_count INTEGER NOT NULL DEFAULT 0,
+                  PRIMARY KEY (app_id, domain, via, script)
+                );
+                CREATE INDEX app_origin_domain ON app_origin(domain);
+                """)
+        }
         return migrator
     }
 
@@ -154,6 +167,22 @@ public final class Store: Sendable {
                 guard let id = ids[key.appKey] else { continue }
                 try upsertHour.execute(arguments: [id, key.domain, key.hour, counts.conn, counts.bytesIn, counts.bytesOut])
             }
+
+            let upsertOrigin = try db.cachedStatement(sql: """
+                INSERT INTO app_origin (app_id, domain, via, script, via_path, chain, first_seen, last_seen, conn_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(app_id, domain, via, script) DO UPDATE SET
+                  conn_count = conn_count + excluded.conn_count,
+                  via_path = excluded.via_path, chain = excluded.chain,
+                  last_seen = MAX(last_seen, excluded.last_seen)
+                """)
+            for (key, row) in merged.origins {
+                guard let id = ids[key.appKey] else { continue }
+                try upsertOrigin.execute(arguments: [
+                    id, key.domain, key.via, key.script, row.viaPath, row.chain,
+                    row.firstSeen.timeIntervalSince1970, row.lastSeen.timeIntervalSince1970, row.count,
+                ])
+            }
         }
     }
 
@@ -165,7 +194,7 @@ public final class Store: Sendable {
 
     public func deleteAll() throws {
         try queue.write { db in
-            try db.execute(sql: "DELETE FROM app_domain_hourly; DELETE FROM app_domain; DELETE FROM app;")
+            try db.execute(sql: "DELETE FROM app_origin; DELETE FROM app_domain_hourly; DELETE FROM app_domain; DELETE FROM app;")
         }
     }
 
@@ -267,6 +296,43 @@ public final class Store: Sendable {
                 let hour: Int64 = row["hour"]
                 return HourPoint(hour: Date(timeIntervalSince1970: TimeInterval(hour) * 3600),
                                  connCount: row["conn"], bytesIn: row["bin"], bytesOut: row["bout"])
+            }
+        }
+    }
+
+    /// Launch contexts grouped by app, responsible app and script. `range` filters by last connection time.
+    public func origins(appID: Int64?, domain: String?, range: TimeRange, now: Date = Date(),
+                        calendar: Calendar = .current) throws -> [OriginSummary] {
+        var conditions: [String] = []
+        var arguments: [(any DatabaseValueConvertible)?] = []
+        if let appID {
+            conditions.append("o.app_id = ?")
+            arguments.append(appID)
+        }
+        if let domain {
+            conditions.append("o.domain = ?")
+            arguments.append(domain)
+        }
+        if let start = range.startDate(now: now, calendar: calendar) {
+            conditions.append("o.last_seen >= ?")
+            arguments.append(start.timeIntervalSince1970)
+        }
+        // With a single MAX() aggregate, SQLite takes the bare columns (via_path, chain) from the latest row.
+        let sql = """
+            SELECT o.app_id, a.display_name, a.identity_key, a.path, o.via, o.via_path, o.script, o.chain,
+                   SUM(o.conn_count) AS conn, MAX(o.last_seen) AS last_seen
+            FROM app_origin o JOIN app a ON a.id = o.app_id
+            \(Self.whereClause(conditions))
+            GROUP BY o.app_id, o.via, o.script ORDER BY conn DESC, last_seen DESC
+            """
+        let statementArguments = StatementArguments(arguments)
+        return try queue.read { db in
+            try Row.fetchAll(db, sql: sql, arguments: statementArguments).map { row in
+                let key: String = row["identity_key"]
+                return OriginSummary(
+                    appID: row["app_id"], appName: row["display_name"] ?? key, appPath: row["path"],
+                    via: row["via"], viaPath: row["via_path"], script: row["script"], chain: row["chain"],
+                    connCount: row["conn"], lastSeen: Date(timeIntervalSince1970: row["last_seen"]))
             }
         }
     }

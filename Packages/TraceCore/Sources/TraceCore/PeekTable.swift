@@ -2,12 +2,14 @@ import Foundation
 
 public struct PendingOpen: Sendable {
     public let app: AppIdentity
+    public let origin: ProcessOrigin?
     public let remote: Endpoint
     public let startedAt: Date
     public var buffer: Data
 
-    public init(app: AppIdentity, remote: Endpoint, startedAt: Date, buffer: Data = Data()) {
+    public init(app: AppIdentity, origin: ProcessOrigin? = nil, remote: Endpoint, startedAt: Date, buffer: Data = Data()) {
         self.app = app
+        self.origin = origin
         self.remote = remote
         self.startedAt = startedAt
         self.buffer = buffer

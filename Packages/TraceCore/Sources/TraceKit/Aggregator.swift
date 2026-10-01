@@ -39,7 +39,8 @@ public final class Aggregator {
             case .opened(let flow):
                 let app = resolve(flow.app)
                 let domain = flow.host ?? flow.remote.ip
-                ops.append(.open(app: app, domain: domain, resolved: flow.host != nil, source: flow.hostSource, time: flow.time))
+                ops.append(.open(app: app, domain: domain, resolved: flow.host != nil, source: flow.hostSource, time: flow.time,
+                                 origin: originInfo(flow.origin, app: app)))
                 pending[flow.flowID] = PendingFlow(appKey: app.key, domain: domain, openedAt: flow.time)
                 recent.record(app: app, domain: domain, time: flow.time)
             case .closed(let flow):
@@ -49,5 +50,22 @@ public final class Aggregator {
             }
         }
         try store.apply(ops)
+    }
+
+    private func originInfo(_ origin: ProcessOrigin?, app: ResolvedApp) -> OriginInfo? {
+        guard let origin else { return nil }
+        var via = ""
+        var viaPath: String?
+        if let path = origin.responsiblePath {
+            let responsible = resolve(AppIdentity(signingID: nil, teamID: nil, bundleID: nil, executablePath: path, pid: 0))
+            // A helper attributed to its own app (e.g. Slack Helper → Slack) adds nothing. Compare names too:
+            // Chrome runs from a code-sign clone whose path does not resolve to the same key.
+            if responsible.key != app.key, responsible.displayName != app.displayName {
+                via = responsible.displayName
+                viaPath = responsible.path
+            }
+        }
+        return OriginInfo(via: via, viaPath: viaPath, script: origin.script ?? "",
+                          chain: origin.ancestors.joined(separator: " ← "))
     }
 }

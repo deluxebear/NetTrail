@@ -40,18 +40,38 @@ public struct Endpoint: Codable, Hashable, Sendable {
     }
 }
 
+/// Who started a process: what the code identity alone cannot tell (e.g. which app ran `curl`).
+public struct ProcessOrigin: Codable, Hashable, Sendable {
+    /// Executable path of the process macOS holds responsible (e.g. the app that spawned a helper tool),
+    /// or nil when the process is responsible for itself.
+    public let responsiblePath: String?
+    /// Executable names of the parent chain, nearest first, ending before launchd.
+    public let ancestors: [String]
+    /// Script or module an interpreter (node, python, …) is running; inline code is never captured.
+    public let script: String?
+
+    public init(responsiblePath: String?, ancestors: [String], script: String?) {
+        self.responsiblePath = responsiblePath
+        self.ancestors = ancestors
+        self.script = script
+    }
+}
+
 public struct FlowOpened: Codable, Equatable, Sendable {
     public let flowID: UUID
     public let time: Date
     public let app: AppIdentity
+    public let origin: ProcessOrigin?
     public let remote: Endpoint
     public let host: String?
     public let hostSource: HostSource
 
-    public init(flowID: UUID, time: Date, app: AppIdentity, remote: Endpoint, host: String?, hostSource: HostSource) {
+    public init(flowID: UUID, time: Date, app: AppIdentity, origin: ProcessOrigin? = nil,
+                remote: Endpoint, host: String?, hostSource: HostSource) {
         self.flowID = flowID
         self.time = time
         self.app = app
+        self.origin = origin
         self.remote = remote
         self.host = host
         self.hostSource = hostSource

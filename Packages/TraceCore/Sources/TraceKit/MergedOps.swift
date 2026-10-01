@@ -35,6 +35,21 @@ struct MergedOps {
         var bytesOut: Int64
     }
 
+    struct OriginKey: Hashable {
+        let appKey: String
+        let domain: String
+        let via: String
+        let script: String
+    }
+
+    struct OriginRow {
+        var viaPath: String?
+        var chain: String
+        var firstSeen: Date
+        var lastSeen: Date
+        var count: Int64
+    }
+
     struct HourCounts {
         var conn: Int64 = 0
         var bytesIn: Int64 = 0
@@ -47,11 +62,12 @@ struct MergedOps {
     /// Latest close time per app key, for `app.last_seen`.
     private(set) var appCloses: [String: Date] = [:]
     private(set) var hours: [HourKey: HourCounts] = [:]
+    private(set) var origins: [OriginKey: OriginRow] = [:]
 
     init(_ ops: [StoreOp]) {
         for op in ops {
             switch op {
-            case let .open(app, domain, resolved, source, time):
+            case let .open(app, domain, resolved, source, time, origin):
                 if var row = apps[app.key] {
                     row.app = app
                     row.firstSeen = min(row.firstSeen, time)
@@ -72,6 +88,20 @@ struct MergedOps {
                     opens[key] = DomainOpen(resolved: resolved, source: source, firstSeen: time, lastSeen: time, count: 1)
                 }
                 hours[HourKey(appKey: app.key, domain: domain, hour: Store.hour(time)), default: HourCounts()].conn += 1
+                if let origin {
+                    let originKey = OriginKey(appKey: app.key, domain: domain, via: origin.via, script: origin.script)
+                    if var row = origins[originKey] {
+                        row.viaPath = origin.viaPath
+                        row.chain = origin.chain
+                        row.firstSeen = min(row.firstSeen, time)
+                        row.lastSeen = max(row.lastSeen, time)
+                        row.count += 1
+                        origins[originKey] = row
+                    } else {
+                        origins[originKey] = OriginRow(viaPath: origin.viaPath, chain: origin.chain,
+                                                       firstSeen: time, lastSeen: time, count: 1)
+                    }
+                }
             case let .close(appKey, domain, time, bytesIn, bytesOut):
                 let inBytes = Int64(clamping: bytesIn)
                 let outBytes = Int64(clamping: bytesOut)

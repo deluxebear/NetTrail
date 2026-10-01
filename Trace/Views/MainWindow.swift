@@ -67,15 +67,22 @@ private struct MainWindowContent: View {
         List(selection: $browser.selection) {
             Label("全部 App", systemImage: "square.grid.2x2").tag(BrowserModel.SidebarItem.allApps)
             Section("App") {
+                let ambiguous = browser.ambiguousNames
                 ForEach(browser.filteredApps) { app in
                     HStack {
                         AppIconView(path: app.path, size: 18)
                         VStack(alignment: .leading) {
                             Text(app.displayName).lineLimit(1)
+                            if ambiguous.contains(app.displayName), let path = app.path {
+                                Text(Formatting.location(path))
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .lineLimit(1).truncationMode(.middle)
+                            }
                             Text("\(app.domainCount) 个域名 · \(Formatting.bytes(app.bytesIn + app.bytesOut))")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
+                    .help(app.path ?? app.key)
                     .tag(BrowserModel.SidebarItem.app(app.id))
                 }
             }

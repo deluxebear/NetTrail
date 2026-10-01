@@ -17,8 +17,25 @@ public struct ResolvedApp: Hashable, Sendable {
     }
 }
 
+/// Launch context of a connection as stored; empty strings mean "none".
+public struct OriginInfo: Hashable, Sendable {
+    /// Display name of the app macOS holds responsible, when it is not the connecting app itself.
+    public let via: String
+    public let viaPath: String?
+    public let script: String
+    /// Parent process names, nearest first, e.g. "zsh ← login ← ghostty".
+    public let chain: String
+
+    public init(via: String, viaPath: String?, script: String, chain: String) {
+        self.via = via
+        self.viaPath = viaPath
+        self.script = script
+        self.chain = chain
+    }
+}
+
 public enum StoreOp: Equatable, Sendable {
-    case open(app: ResolvedApp, domain: String, resolved: Bool, source: HostSource, time: Date)
+    case open(app: ResolvedApp, domain: String, resolved: Bool, source: HostSource, time: Date, origin: OriginInfo? = nil)
     case close(appKey: String, domain: String, time: Date, bytesIn: UInt64, bytesOut: UInt64)
 }
 
@@ -69,6 +86,19 @@ public struct DomainSummary: Identifiable, Equatable, Sendable {
     public let connCount: Int64
     public let bytesIn: Int64
     public let bytesOut: Int64
+}
+
+public struct OriginSummary: Identifiable, Equatable, Sendable {
+    public var id: String { "\(appID)|\(via)|\(script)" }
+    public let appID: Int64
+    public let appName: String
+    public let appPath: String?
+    public let via: String
+    public let viaPath: String?
+    public let script: String
+    public let chain: String
+    public let connCount: Int64
+    public let lastSeen: Date
 }
 
 public struct HourPoint: Identifiable, Equatable, Sendable {
