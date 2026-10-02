@@ -27,6 +27,13 @@ struct SettingsView: View {
                 LabeledContent("Status", value: extensionStatusText)
                 Button("Uninstall Extension…", role: .destructive) { confirmUninstall = true }
             }
+            Section("About") {
+                LabeledContent("Version", value: appVersion)
+                LabeledContent("Author", value: "deluxebear")
+                LabeledContent("GitHub") {
+                    Link("deluxebear/NetTrail", destination: Self.repositoryURL)
+                }
+            }
         }
         .formStyle(.grouped)
         .frame(width: 440)
@@ -37,6 +44,12 @@ struct SettingsView: View {
         .confirmationDialog("Recording stops once the extension is uninstalled.", isPresented: $confirmUninstall) {
             Button("Uninstall", role: .destructive) { Task { await extensionManager.uninstall() } }
         }
+    }
+
+    private static let repositoryURL = URL(string: "https://github.com/deluxebear/NetTrail")!
+
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–"
     }
 
     private var extensionStatusText: String {
