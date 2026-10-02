@@ -6,6 +6,10 @@
 
 NetTrail 是一款原生 macOS 菜单栏应用。它通过「只观察」的 Network Extension 内容过滤器记录每个 App 的网络连接，并按 App 与域名展示。它**不会拦截、修改或转发**任何流量，所有数据都只保存在本机。
 
+## 演示
+
+https://github.com/user-attachments/assets/2616e1b0-64e8-450b-9d4f-c57138878e8f
+
 ## 功能
 
 - **按 App 追踪域名**：查看某个 App 访问过的所有域名，包括首次/最近访问时间、连接数、上下行流量。

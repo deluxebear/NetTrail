@@ -6,6 +6,12 @@ See which domains every app on your Mac connects to — when, how often, and how
 
 NetTrail is a native macOS menu bar app. It uses a monitor-only Network Extension content filter to record each app's network connections and shows them by app and domain. It **never blocks, modifies or forwards** any traffic, and all data stays on your Mac.
 
+## Demo
+
+_The video's UI is in Simplified Chinese._
+
+https://github.com/user-attachments/assets/2616e1b0-64e8-450b-9d4f-c57138878e8f
+
 ## Features
 
 - **Per-app domain tracking** — browse every domain an app contacted, with first/last seen time, connection count and upload/download bytes.
