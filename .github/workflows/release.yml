@@ -67,6 +67,9 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP"
           spctl --assess --type execute --verbose=2 "$APP"
           lipo -archs "$APP/Contents/MacOS/NetTrail"
+          codesign -d --entitlements - "$APP" 2>/dev/null | grep -q "com.apple.developer.system-extension.install"
+          codesign -d --entitlements - "$APP/Contents/Library/SystemExtensions/"*.systemextension 2>/dev/null \
+            | grep -q "content-filter-provider-systemextension"
 
       - uses: actions/upload-artifact@v7
         with:

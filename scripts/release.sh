@@ -44,12 +44,24 @@ xcodebuild -exportArchive -archivePath "$OUT/NetTrail.xcarchive" \
   -exportOptionsPlist "$OUT/export.plist" -exportPath "$OUT/export"
 
 APP="$OUT/export/NetTrail.app"
-# The unsigned archive carries no hardened runtime flag; re-sign inside-out with it
-# (required for notarization), keeping the entitlements and embedded profiles.
-for bundle in "$APP"/Contents/Library/SystemExtensions/*.systemextension "$APP"; do
-  codesign --force --options runtime --timestamp --preserve-metadata=entitlements,identifier \
-    --sign "$SIGN_IDENTITY" "$bundle"
+# The unsigned archive carries neither entitlements nor the hardened runtime flag, so
+# re-sign inside-out with both (notarization and system-extension install need them).
+# Entitlements come from the source .entitlements files with build variables expanded.
+APP_GROUP="$TEAM_ID.$BUNDLE_ID"
+NE_FILTER="$(sed -nE 's/^TRACE_NE_FILTER *= *//p' Config/Release.xcconfig)"
+make_entitlements() {  # <source.entitlements> <bundle id> <output>
+  sed -e "s/\$(TRACE_NE_FILTER)/$NE_FILTER/g" -e "s/\$(TRACE_APP_GROUP)/$APP_GROUP/g" "$1" > "$3"
+  /usr/libexec/PlistBuddy -c "Add :com.apple.application-identifier string $TEAM_ID.$2" "$3"
+  /usr/libexec/PlistBuddy -c "Add :com.apple.developer.team-identifier string $TEAM_ID" "$3"
+}
+make_entitlements Trace/Trace.entitlements "$BUNDLE_ID" "$OUT/app.entitlements"
+make_entitlements TraceFilter/TraceFilter.entitlements "$BUNDLE_ID.filter" "$OUT/filter.entitlements"
+for sysext in "$APP"/Contents/Library/SystemExtensions/*.systemextension; do
+  codesign --force --options runtime --timestamp --entitlements "$OUT/filter.entitlements" \
+    --sign "$SIGN_IDENTITY" "$sysext"
 done
+codesign --force --options runtime --timestamp --entitlements "$OUT/app.entitlements" \
+  --sign "$SIGN_IDENTITY" "$APP"
 codesign --verify --deep --strict "$APP"
 DMG="build/NetTrail-$APP_VERSION-$ARCH.dmg"
 STAGE="$OUT/dmg"; mkdir -p "$STAGE"
