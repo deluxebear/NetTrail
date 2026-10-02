@@ -26,8 +26,11 @@ private struct MainWindowContent: View {
         NavigationSplitView {
             sidebar
         } content: {
-            DomainTableView(browser: browser)
-                .navigationSplitViewColumnWidth(min: 420, ideal: 620)
+            VStack(spacing: 0) {
+                banners
+                DomainTableView(browser: browser)
+            }
+            .navigationSplitViewColumnWidth(min: 420, ideal: 620)
         } detail: {
             DomainDetailView(browser: browser)
                 .navigationSplitViewColumnWidth(min: 260, ideal: 320)
@@ -48,7 +51,6 @@ private struct MainWindowContent: View {
             }
             ToolbarItem { UpdateButton(checker: model.updates) }
         }
-        .safeAreaInset(edge: .top) { banners }
         .sheet(isPresented: $showOnboarding) { OnboardingView() }
         .onAppear {
             browser.reload()
