@@ -22,6 +22,7 @@ final class AppModel: ObservableObject {
     private let connection: FilterConnection
 
     let recent = RecentFeed()
+    let updates = UpdateChecker()
     @Published private(set) var isConnected = false
     @Published private(set) var droppedTotal: UInt64 = 0
     @Published private(set) var dataVersion = 0
@@ -87,6 +88,7 @@ final class AppModel: ObservableObject {
     func start() async {
         guard !started else { return }
         started = true
+        updates.start()
         await extensionManager.refresh()
         await purgeOldHistory()
         Task { await pollLoop() }

@@ -6,6 +6,7 @@ struct SettingsView: View {
     @EnvironmentObject private var extensionManager: ExtensionManager
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
+    @AppStorage(UpdateChecker.enabledKey) private var checkForUpdates = true
     @State private var confirmClear = false
     @State private var confirmUninstall = false
 
@@ -14,6 +15,8 @@ struct SettingsView: View {
             Section("General") {
                 Toggle("Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in setLaunchAtLogin(enabled) }
+                Toggle("Check for updates automatically", isOn: $checkForUpdates)
+                    .onChange(of: checkForUpdates) { _, _ in Task { await model.updates.check() } }
                 if let loginError { Text(loginError).foregroundStyle(.red).font(.caption) }
                 Stepper("Keep history for \(model.retentionDays) days", value: $model.retentionDays, in: 1...365)
             }

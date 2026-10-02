@@ -218,6 +218,23 @@
         }
       }
     },
+    "A new version of NetTrail is available. Click to open the download page.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A new version of NetTrail is available. Click to open the download page."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网迹有新版本，点击打开下载页面。"
+          }
+        }
+      }
+    },
     "All": {
       "extractionState": "manual",
       "localizations": {
@@ -280,6 +297,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "等待批准"
+          }
+        }
+      }
+    },
+    "Check for updates automatically": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check for updates automatically"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动检查更新"
           }
         }
       }
@@ -1166,6 +1200,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "未解析"
+          }
+        }
+      }
+    },
+    "Update Available: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update Available: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有新版本：%@"
           }
         }
       }

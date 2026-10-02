@@ -46,6 +46,7 @@ private struct MainWindowContent: View {
                 }
                 .help("Settings (⌘,)")
             }
+            ToolbarItem { UpdateButton(checker: model.updates) }
         }
         .safeAreaInset(edge: .top) { banners }
         .sheet(isPresented: $showOnboarding) { OnboardingView() }
@@ -141,5 +142,21 @@ private struct MainWindowContent: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(8)
             .background(.orange.opacity(0.15))
+    }
+}
+
+/// Shown in the toolbar only while a newer release exists; opens its release page.
+private struct UpdateButton: View {
+    @ObservedObject var checker: UpdateChecker
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        if let update = checker.available {
+            Button("Update Available: \(update.version)", systemImage: "arrow.down.circle.fill") {
+                openURL(update.url)
+            }
+            .foregroundStyle(.tint)
+            .help("A new version of NetTrail is available. Click to open the download page.")
+        }
     }
 }
